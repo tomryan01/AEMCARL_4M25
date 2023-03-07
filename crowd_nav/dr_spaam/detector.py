@@ -64,7 +64,7 @@ class Detector(object):
             self._scan_phi = np.linspace(
                 -half_fov_rad, half_fov_rad, len(scan), dtype=np.float32
             )
-
+        # print("SCAN before:",scan)
         # preprocess
         ct = u.scans_to_cutout(
             scan[None, ...],
@@ -78,6 +78,7 @@ class Detector(object):
             padding_val=29.99,
             area_mode=True,
         )
+        # print("SCAN after preprocess:",scan)
         ct = torch.from_numpy(ct).float()
 
         if self._gpu:

@@ -115,6 +115,8 @@ def main():
     env_config.set("reward", "reward_increment", reward_increment)
     env_config.set("reward", "position_variance", position_variance)
     env_config.set("reward", "direction_variance", direction_variance)
+    env_config.set("robot", "sensor", "lidar")
+    # env_config.set("humans", "policy", "linear")
     # env_config.set("robot", "visible", agent_visible)
 
     env = gym.make('CrowdSim-v0')
@@ -126,7 +128,8 @@ def main():
     robot = Robot(env_config, 'robot')
     robot.visible = agent_visible
 
-    print("robot visable: ", robot.visible)
+    print("robot visible: ", robot.visible)
+    print("robot sensor: ", robot.sensor)
 
     robot.set_policy(policy)
     env.set_robot(robot)

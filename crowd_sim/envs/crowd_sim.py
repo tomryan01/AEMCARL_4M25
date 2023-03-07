@@ -17,8 +17,12 @@ import math
 import cv2
 from math import atan2, pi
 from dr_spaam.detector import Detector
+from scipy.spatial import distance
+from scipy.optimize import linear_sum_assignment
 
-dr_model_file = 'trained_models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth'
+# dr_model_file = 'trained_models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth'
+dr_model_file = 'trained_models/ckpt_jrdb_ann_drow3_e40.pth'
+
 
 table_size = 10000
 table_offset = 5000
@@ -254,16 +258,17 @@ class CrowdSim(gym.Env):
         self.test_sim = None
         self.square_width = None
         self.circle_radius = None
-        self.human_num = None
+        self.human_num = 10
         self.lidar_fov = 360
-        self.scan_points = 360
+        self.scan_points = 450
         self.lidar_resolution = np.deg2rad(self.lidar_fov/self.scan_points)
-        self.detector = Detector(dr_model_file, model='DR-SPAAM',gpu=True,stride=1,panoramic_scan=True)
+        self.detector = Detector(dr_model_file, model='DROW3',gpu=True,stride=1,panoramic_scan=True)
         self.detector.set_laser_fov(self.lidar_fov)
         # for visualization
         self.states = None
         self.scans = None
         self.detections = None
+        self.detection_assignments = None
         self.action_values = None
         self.attention_weights = None
 
@@ -335,6 +340,9 @@ class CrowdSim(gym.Env):
         :param rule:
         :return:
         """
+        # rule is circle_crossing
+
+        # print("RULE:",rule)
         # initial min separation distance to avoid danger penalty at beginning
         if rule == 'square_crossing':
             self.humans = []
@@ -599,6 +607,7 @@ class CrowdSim(gym.Env):
         self.states = list()
         self.scans = list()
         self.detections = list()
+        self.detection_assignments = list()
         if hasattr(self.robot.policy, 'action_values'):
             self.action_values = list()
         if hasattr(self.robot.policy, 'get_attention_weights'):
@@ -607,6 +616,8 @@ class CrowdSim(gym.Env):
         # get current observation
         if self.robot.sensor == 'coordinates':
             ob = [human.get_observable_state() for human in self.humans]
+        elif self.robot.sensor == 'lidar':
+            ob = [human.get_detected_state() for human in self.humans]
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
@@ -614,6 +625,77 @@ class CrowdSim(gym.Env):
 
     def onestep_lookahead(self, action, rebuild=True):
         return self.step(action, update=False, rebuild=rebuild)
+
+    def find_assignment(self, prev_dets_xy, dets_xy):
+        # find OF predictions for next positions based on prev detections
+
+        prev_dets = prev_dets_xy.copy()
+        dets = dets_xy.copy()
+        # transform from (-6,6) to (0,12)
+        prev_dets += 6.
+        prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
+        dets += 6.
+
+        # image of previous frame
+        prev_frame = np.zeros((32,32,3), dtype=np.float32)
+        for i in range(len(prev_dets)):
+            item = prev_dets[i]
+            x, y = item[0]
+            x = int(x)
+            y = int(y)
+            prev_frame[x][y] = 255. - (i*10)
+        prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+
+        # image of current frame
+        curr_frame = np.zeros((32,32,3), dtype=np.float32)
+        for i in range(len(dets)):
+            item = dets[i]
+            x, y = item
+            x = int(x)
+            y = int(y)
+            curr_frame[x][y] = 255. - (i*10)
+        curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+
+        # print("SHAPES")
+        # print(prev_frame.shape)
+        # print(curr_frame.shape)
+        prev_frame = np.uint8(prev_frame)
+        curr_frame = np.uint8(curr_frame)
+        # optical flow predicts positions of current detections
+        # preserving ordering of prev_dets
+        lk_params = dict( winSize  = (15, 15),
+                        maxLevel = 2,
+                        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+        OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
+
+        # next_pos_preds = OF_preds[st==1]
+        next_pos_preds = OF_preds
+        assert len(next_pos_preds) == len(dets)
+
+        # match OF preds with current detections with hungarian algorithm
+        # cost matrix
+        n = len(next_pos_preds)
+        costs = np.zeros((n, n))
+        #            det1 det2 ...
+        # of_pred1
+        # of_pred2
+        # ...
+
+        for i in range(n):
+            of_pred = next_pos_preds[i]
+            for j in range(n):
+                det = dets[j]
+                dist = distance.euclidean(of_pred, det)
+                costs[i][j] = dist
+
+        row_ind, col_ind = linear_sum_assignment(costs)
+        col_ind = np.array(col_ind)
+        # col_ind = np.arange(len(dets))
+        # col_ind = np.array([4,2,1,0,3])
+        # dets -= 6.
+        # print(col_ind)
+        return col_ind
+
 
     def step(self, action, update=True, rebuild=True):
         """
@@ -719,19 +801,101 @@ class CrowdSim(gym.Env):
             if hasattr(self.robot.policy, 'get_attention_weights'):
                 self.attention_weights.append(self.robot.policy.get_attention_weights())
 
-            scan = self.scan_lidar()
-            self.scans.append(self.scan_to_points(scan))
-            dets_xy, dets_cls, instance_mask = self.detector(scan) 
-            cls_mask = dets_cls > 0.1
-            dets_xy = dets_xy[cls_mask]
             
-            dets_xy_glob = []
-            for i in range(len(dets_xy)):
-                x = dets_xy[i][0]
-                y = dets_xy[i][1]
-                dets_xy_glob.append([x + self.robot.px, y + self.robot.py])
 
-            self.detections.append(dets_xy_glob)
+            # get LiDAR scan
+            scan = self.scan_lidar()
+            # print(type(scan))
+            # print(self.time_step)
+            # with open('/home/sharday/adv_robotics/DROW/v1/test_' + str(self.time_step) + '.npy', 'wb') as f:
+            #     np.save(f, scan)
+
+            self.scans.append(self.scan_to_points(scan))
+
+
+            # get people detections (positions)
+            full_dets_xy, dets_cls, instance_mask = self.detector(scan) 
+            cls_mask = dets_cls > 0.1
+            # print("cls_mask",cls_mask)
+            dets_xy = full_dets_xy[cls_mask]
+
+
+
+            # correct the current detection set if too short or long
+            num_detections = len(dets_xy)
+            if num_detections < len(self.humans):
+                if len(full_dets_xy) > len(dets_xy): # fill in with the more unlikely detections
+                    dets_xy = full_dets_xy
+                    if len(dets_xy) < len(self.humans): # assign random numbers if run out of detections
+                        rem = len(self.humans) - len(dets_xy)
+                        random_positions = np.random.rand(rem,2) * 2
+                        dets_xy = np.concatenate([dets_xy, random_positions])
+            if len(dets_xy) > len(self.humans):
+                # remove least likely predictions from end
+                dets_xy = dets_xy[:len(self.humans),:]
+
+            # process detections
+            robot_positions = [state[0].position for state in self.states]
+            dets_xy *= -1
+            dets_xy += robot_positions[-1]
+            
+
+            if len(self.detections) > 0: # beyond first pass - match to previous detections
+                # get previous set of detections
+                prev_dets_xy = self.detections[-1]
+                # print(dets_xy)
+                curr_assignment = self.find_assignment(prev_dets_xy, dets_xy)
+                dets_xy = dets_xy[curr_assignment]
+                # print(dets_xy)
+            # if first set of detections, skip optical flow (initial ids are A-E)
+
+            assert len(dets_xy) == len(self.humans)
+            self.detections.append(dets_xy)
+
+            for i, pos in enumerate(dets_xy):
+                self.humans[i].set_detected_state(pos, self.agent_timestep)
+            
+
+            ############## visualise detections ############
+            # import matplotlib.pyplot as plt
+ 
+            ########## scan to xy positions
+            # scan_points = self.scan_to_points(scan)
+            # x = [scan_points[i][0] for i in range(len(scan_points))]
+            # y = [scan_points[i][1] for i in range(len(scan_points))]
+            
+            # plt.figure(figsize=(6,10))
+
+            
+            # human_positions = [[state[1][j].position for j in range(len(self.humans))] for state in self.states]
+            # print("ROBOT:",robot_positions)
+            # print("HUMANS:",human_positions)
+            # rx, ry = robot_positions[-1]
+            # plt.scatter(rx, ry, c='r')
+            
+            # for state in self.states:
+            #     for j in range(len(self.humans)):
+            #         hx, hy = state[1][j].position
+            #         print(hx, hy)
+                    # plt.scatter(hx, hy, c='g')
+
+            # x += rx
+            # y += ry
+            # dets_xy[:,0] += rx
+            # dets_xy[:,1] += ry
+            
+            # plt.plot(x, y)
+            # plt.scatter(dets_xy[:,0], dets_xy[:,1], c='b')
+            # plt.plot([oy, np.zeros(np.size(oy))], [ox, np.zeros(np.size(oy))], "ro-") # lines from 0,0 to the
+            # plt.axis("equal")
+            # bottom, top = plt.ylim()  # return the current ylim
+            # plt.ylim((top, bottom)) # rescale y axis, to match the grid orientation
+            # plt.grid(True)
+            # plt.show()
+
+            #########################
+
+            
 
             # update all agents
             self.robot.step(action)
@@ -748,7 +912,9 @@ class CrowdSim(gym.Env):
                 ob = [human.get_observable_state() for human in self.humans]
             elif self.robot.sensor == 'lidar':
                 # todo: take human angles and put into some sort of observation - what does that mean for our case?
-                human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+                # human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+                ob = [human.get_detected_state() for human in self.humans]
+                # print(ob)
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
         else:
@@ -789,6 +955,8 @@ class CrowdSim(gym.Env):
                 human_circle = plt.Circle(human.get_position(), human.radius, fill=False, color='b')
                 ax.add_artist(human_circle)
             ax.add_artist(plt.Circle(self.robot.get_position(), self.robot.radius, fill=True, color='r'))
+
+            
             plt.show()
         elif mode == 'traj':
             fig, ax = plt.subplots(figsize=(7, 7))
@@ -843,6 +1011,22 @@ class CrowdSim(gym.Env):
                 # xs = [scan_points[i][0] for i in range(len(scan_points))]
                 # ys = [scan_points[i][1] for i in range(len(scan_points))]
                 # ax.scatter(xs, ys, s=10)
+
+
+
+            # scan_points = self.scans[0]
+            # xs = [scan_points[i][0] for i in range(len(scan_points))]
+            # ys = [scan_points[i][1] for i in range(len(scan_points))]
+            # global scatter 
+            # scatter = ax.scatter(xs, ys, c='b', s=5)
+
+            # detection_points = self.detections[0]
+            # xs = [detection_points[i][0] for i in range(len(detection_points))]
+            # ys = [detection_points[i][1] for i in range(len(detection_points))]
+            # global scatter2
+            # scatter2 = ax.scatter(xs, ys, c='g', s=30)
+
+
             plt.legend([robot], ['Robot'], fontsize=16)
             plt.show()
         elif mode == 'video':
@@ -876,6 +1060,8 @@ class CrowdSim(gym.Env):
             for i, human in enumerate(humans):
                 ax.add_artist(human)
                 ax.add_artist(human_numbers[i])
+
+
 
             # add time annotation
             time = plt.text(-1, 5, 'Time: {}'.format(0), fontsize=16)
@@ -918,6 +1104,7 @@ class CrowdSim(gym.Env):
             for arrow in arrows:
                 ax.add_artist(arrow)
 
+            ############# BLUE DOTS
             scan_points = self.scans[0]
             xs = [scan_points[i][0] for i in range(len(scan_points))]
             ys = [scan_points[i][1] for i in range(len(scan_points))]
@@ -929,6 +1116,19 @@ class CrowdSim(gym.Env):
             ys = [detection_points[i][1] for i in range(len(detection_points))]
             global scatter2
             scatter2 = ax.scatter(xs, ys, c='g', s=30)
+
+            alph = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+            det_human_numbers = [
+                plt.text(detection_points[i][0] - x_offset + .5,
+                        detection_points[i][1] - y_offset + .5,
+                        str(alph[i]),
+                        color='r',
+                        fontsize=12) for i in range(len(detection_points))
+            ]
+
+            for i in range(len(det_human_numbers)):
+                ax.add_artist(det_human_numbers[i])
 
             global_step = 0
             def update(frame_num):
@@ -943,14 +1143,30 @@ class CrowdSim(gym.Env):
                 scatter.remove()
                 scatter = ax.scatter(xs, ys, c='b', s=5)
                 detection_points = self.detections[frame_num]
+                assert len(detection_points) == len(self.humans)
                 xs = [detection_points[i][0] for i in range(len(detection_points))]
                 ys = [detection_points[i][1] for i in range(len(detection_points))]
                 global scatter2 
                 scatter2.remove()
-                scatter2 = ax.scatter(xs, ys, c='g', s=30)
+                scatter2 = ax.scatter(xs, ys, c='r', s=70, edgecolors='k')
+
+                # detection point id labels
+
+
+
+                for i in range(len(det_human_numbers)):
+                    # human.center = human_positions[frame_num][i]
+                    # x = detection_points[i][0]
+                    # y = detection_points[i][1] 
+                    x = xs[i]
+                    y = ys[i]
+                    det_human_numbers[i].set_position((x - x_offset + .5, y - y_offset + .5))
+
+
+                # plot humans and numbers
                 for i, human in enumerate(humans):
                     human.center = human_positions[frame_num][i]
-                    human_numbers[i].set_position((human.center[0] - x_offset, human.center[1] - y_offset))
+                    human_numbers[i].set_position((human.center[0] - x_offset - .5, human.center[1] - y_offset + .5))
                     for arrow in arrows:
                         arrow.remove()
                     arrows = [

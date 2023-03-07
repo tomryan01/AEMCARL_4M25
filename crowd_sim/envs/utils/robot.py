@@ -9,7 +9,12 @@ class Robot(Agent):
     def act(self, ob):
         if self.policy is None:
             raise AttributeError('Policy attribute has to be set!')
+        # for o in ob:
+        #     print(str(o))
+        # ob = []
         state = JointState(self.get_full_state(), ob)
+        print(str(state.self_state))
+        
         action = self.policy.predict(state)
         # print("self.policy.last_state: ",self.policy.last_state)
         return action

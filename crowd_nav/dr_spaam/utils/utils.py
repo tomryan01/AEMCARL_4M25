@@ -47,10 +47,12 @@ def xy_to_rphi(x, y):
 
 def rphi_to_xy(r, phi):
     return r * np.cos(phi), r * np.sin(phi)
+    # return r * -np.sin(phi), r * np.cos(phi)
 
 
 def rphi_to_xy_torch(r, phi):
     return r * torch.cos(phi), r * torch.sin(phi)
+    # return r * -torch.sin(phi), r * torch.cos(phi)
 
 
 def global_to_canonical(scan_r, scan_phi, dets_r, dets_phi):
@@ -216,8 +218,8 @@ def scans_to_cutout(
     outbound_mask = np.logical_or(inds_ct < 0, inds_ct > num_pts - 1)
 
     # cutout (linear interp)
-    inds_ct_low = _clip(np.floor(inds_ct), 0, num_pts - 1).astype(np.int)
-    inds_ct_high = _clip(inds_ct_low + 1, 0, num_pts - 1).astype(np.int)
+    inds_ct_low = _clip(np.floor(inds_ct), 0, num_pts - 1).astype(np.int32)
+    inds_ct_high = _clip(inds_ct_low + 1, 0, num_pts - 1).astype(np.int32)
     inds_ct_ratio = _clip(inds_ct - inds_ct_low, 0.0, 1.0)
     inds_offset = (
         np.arange(num_scans).reshape(1, num_scans, 1) * num_pts

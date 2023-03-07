@@ -28,6 +28,7 @@ class Agent(object):
         self.theta = None
         self.time_step = None
 
+
     def print_info(self):
         logging.info('Agent is {} and has {} kinematic constraint'.format(
             'visible' if self.visible else 'invisible', self.kinematics))
@@ -59,6 +60,7 @@ class Agent(object):
 
     def get_observable_state(self):
         return ObservableState(self.px, self.py, self.vx, self.vy, self.radius)
+
 
     def get_next_observable_state(self, action):
         self.check_validity(action)
