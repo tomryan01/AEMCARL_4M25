@@ -553,7 +553,7 @@ class CrowdSim(gym.Env):
 
         rotation = heading_angle - self.previous_angle
         self.previous_angle = heading_angle
-        shifted = scan + rotation/(2*np.pi)
+        shifted = scan + (rotation+np.pi)/(4*np.pi)
 
         print("ROT:", rotation)
 
