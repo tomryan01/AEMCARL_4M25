@@ -19,6 +19,7 @@ from math import atan2, pi
 from dr_spaam.detector import Detector
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
+import matplotlib.pyplot as plt
 
 # dr_model_file = 'trained_models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth'
 dr_model_file = 'trained_models/ckpt_jrdb_ann_drow3_e40.pth'
@@ -276,6 +277,10 @@ class CrowdSim(gym.Env):
 
         self.file_path_prefix = "crowd_nav/map_debug/"
         self.exec_times = 0
+
+        self.lidar_scans = None
+        self.previous_angle = 0.0
+        
 
     def configure(self, config):
         self.config = config
@@ -538,8 +543,37 @@ class CrowdSim(gym.Env):
                     out_scan[i] = -(dim+y)/np.sin(ang)
                 
             
-        # print(out_scan)
         return out_scan
+    
+    def shift_scan (self, scan, time_step):
+
+        delta_x = self.robot.vx * time_step
+        delta_y = self.robot.vy * time_step
+        heading_angle = atan2(delta_y, delta_x)
+
+        rotation = heading_angle - self.previous_angle
+        self.previous_angle = heading_angle
+        shifted = scan + rotation/(2*np.pi)
+
+        print("ROT:", rotation)
+
+        return shifted
+        
+    def construct_img (self, scans):
+       
+        # Normalize 
+        d_min = np.min(scans)
+        d_max = np.max(scans)
+        intensities = ((scans - d_min) * 255 / (d_max - d_min)).astype(np.uint8)
+
+        # Create the image 
+        cmap = plt.cm.viridis
+        depth_image = cmap(intensities)
+        print(np.shape(depth_image))
+
+        # Display the image
+        plt.imshow(depth_image)
+        plt.show()
     
     def scan_to_points(self, scan):
         coords = []
@@ -548,6 +582,9 @@ class CrowdSim(gym.Env):
             coords.append([self.robot.px + scan[i]*np.cos(np.deg2rad(ang)), self.robot.py + scan[i]*np.sin(np.deg2rad(ang))])
 
         return coords
+    
+    def generate_embedding ():
+        pass
 
 
     def reset(self, phase='test', test_case=None):
@@ -606,6 +643,7 @@ class CrowdSim(gym.Env):
 
         self.states = list()
         self.scans = list()
+        self.lidar_scans = list()
         self.detections = list()
         self.detection_assignments = list()
         if hasattr(self.robot.policy, 'action_values'):
@@ -801,11 +839,27 @@ class CrowdSim(gym.Env):
             if hasattr(self.robot.policy, 'get_attention_weights'):
                 self.attention_weights.append(self.robot.policy.get_attention_weights())
 
+            # get LiDAR scan
+            time_step = self.time_step
+            scan = self.scan_lidar()
+
+            if(self.global_time == 0):
+                delta_x = self.robot.vx * time_step
+                delta_y = self.robot.vy * time_step
+                heading_angle = atan2(delta_y, delta_x)
+                self.previous_angle = heading_angle
             
 
-            # get LiDAR scan
-            scan = self.scan_lidar()
-            # print(type(scan))
+            if(self.global_time != 0):
+                scan_app = self.shift_scan(scan, time_step)
+                self.lidar_scans.append(scan_app)
+
+            if(np.shape(self.lidar_scans)[0] == 59 ):
+                scan_app = self.shift_scan(scan, time_step)
+                self.lidar_scans.append(scan_app)
+            #    and np.shape(self.lidar_scans)[0]%10 == 0):
+                self.construct_img(self.lidar_scans)
+                
             # print(self.time_step)
             # with open('/home/sharday/adv_robotics/DROW/v1/test_' + str(self.time_step) + '.npy', 'wb') as f:
             #     np.save(f, scan)
@@ -818,7 +872,6 @@ class CrowdSim(gym.Env):
             cls_mask = dets_cls > 0.1
             # print("cls_mask",cls_mask)
             dets_xy = full_dets_xy[cls_mask]
-
 
 
             # correct the current detection set if too short or long
