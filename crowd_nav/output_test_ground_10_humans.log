@@ -1,0 +1,7 @@
+2023-03-08 22:56:17, INFO: Using device: cuda:0
+2023-03-08 22:56:20, INFO: human number: 10
+2023-03-08 22:56:20, INFO: Not randomize human's radius and preferred speed
+2023-03-08 22:56:20, INFO: Training simulation: circle_crossing, test simulation: circle_crossing
+2023-03-08 22:56:20, INFO: Square width: 10.0, circle width: 4.0
+2023-03-08 22:56:20, INFO: Agent is invisible and has holonomic kinematic constraint
+2023-03-08 23:50:08, INFO: TEST  has success rate: 0.96, collision rate: 0.02, nav time: 14.93, total reward: 0.1878, path length: 10.90, intrusion time ratio (ITR): 3.01, and social distance during intrusions (SD): 0.12

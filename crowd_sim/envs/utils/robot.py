@@ -13,7 +13,7 @@ class Robot(Agent):
         #     print(str(o))
         # ob = []
         state = JointState(self.get_full_state(), ob)
-        print(str(state.self_state))
+        # print(str(state.self_state))
         
         action = self.policy.predict(state)
         # print("self.policy.last_state: ",self.policy.last_state)

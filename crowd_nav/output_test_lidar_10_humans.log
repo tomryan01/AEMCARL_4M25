@@ -1,0 +1,7 @@
+2023-03-09 21:50:20, INFO: Using device: cuda:0
+2023-03-09 21:50:42, INFO: human number: 5
+2023-03-09 21:50:42, INFO: Not randomize human's radius and preferred speed
+2023-03-09 21:50:42, INFO: Training simulation: circle_crossing, test simulation: circle_crossing
+2023-03-09 21:50:42, INFO: Square width: 10.0, circle width: 4.0
+2023-03-09 21:50:42, INFO: Agent is invisible and has holonomic kinematic constraint
+2023-03-09 21:51:15, INFO: It takes 12.00 seconds to finish. Final status is Reaching goal

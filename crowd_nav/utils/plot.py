@@ -12,12 +12,12 @@ def running_mean(x, n):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('log_files', type=str, nargs='+')
-    parser.add_argument('--plot_sr', default=False, action='store_true')
-    parser.add_argument('--plot_cr', default=False, action='store_true')
-    parser.add_argument('--plot_time', default=False, action='store_true')
+    parser.add_argument('--plot_sr', default=True, action='store_true')
+    parser.add_argument('--plot_cr', default=True, action='store_true')
+    parser.add_argument('--plot_time', default=True, action='store_true')
     parser.add_argument('--plot_reward', default=True, action='store_true')
     parser.add_argument('--plot_train', default=True, action='store_true')
-    parser.add_argument('--plot_val', default=False, action='store_true')
+    parser.add_argument('--plot_val', default=True, action='store_true')
     parser.add_argument('--window_size', type=int, default=200)
     args = parser.parse_args()
 
@@ -49,6 +49,8 @@ def main():
             val_cr.append(float(r[2]))
             val_time.append(float(r[3]))
             val_reward.append(float(r[4]))
+        print("EPISODES",val_episode)
+        print(val_sr)
 
         train_pattern = r"TRAIN in episode (?P<episode>\d+) has success rate: (?P<sr>[0-1].\d+), " \
                         r"collision rate: (?P<cr>[0-1].\d+), nav time: (?P<time>\d+.\d+), " \
@@ -76,37 +78,48 @@ def main():
         train_time_smooth = running_mean(train_time, args.window_size)
         train_reward_smooth = running_mean(train_reward, args.window_size)
 
+        # average navigation time
+        avg_nav_time_train = sum(train_time) / len(train_time)
+        avg_nav_time_val = sum(val_time) / len(val_time)
+
+        print("Average navigation time (training):",avg_nav_time_train)
+        print("Average navigation time (validation):",avg_nav_time_val)
+
         # plot sr
         if args.plot_sr:
             if ax1 is None:
                 _, ax1 = plt.subplots()
             if args.plot_train:
                 ax1.plot(range(len(train_sr_smooth)), train_sr_smooth)
-                ax1_legends.append(models[i])
+                # ax1_legends.append(models[i])
+                ax1_legends.append("Training")
             if args.plot_val:
                 ax1.plot(val_episode, val_sr)
-                ax1_legends.append(models[i])
+                # ax1_legends.append(models[i])
+                ax1_legends.append("Validation")
 
             ax1.legend(ax1_legends)
             ax1.set_xlabel('Episodes')
             ax1.set_ylabel('Success Rate')
-            ax1.set_title('Success rate')
+            ax1.set_title('Success Rate (SR)')
 
-        # plot time
+        # plot navigation time
         if args.plot_time:
             if ax2 is None:
                 _, ax2 = plt.subplots()
             if args.plot_train:
                 ax2.plot(range(len(train_time_smooth)), train_time_smooth)
-                ax2_legends.append(models[i])
+                # ax2_legends.append(models[i])
+                ax2_legends.append("Training")
             if args.plot_val:
                 ax2.plot(val_episode, val_time)
-                ax2_legends.append(models[i])
+                # ax2_legends.append(models[i])
+                ax2_legends.append("Validation")
 
             ax2.legend(ax2_legends)
             ax2.set_xlabel('Episodes')
             ax2.set_ylabel('Time(s)')
-            ax2.set_title("Robot's Time to Reach Goal")
+            ax2.set_title("Robot Navigation Time (successful episodes)")
 
         # plot cr
         if args.plot_cr:
@@ -114,10 +127,12 @@ def main():
                 _, ax3 = plt.subplots()
             if args.plot_train:
                 ax3.plot(range(len(train_cr_smooth)), train_cr_smooth)
-                ax3_legends.append(models[i])
+                # ax3_legends.append(models[i])
+                ax3_legends.append("Training")
             if args.plot_val:
                 ax3.plot(val_episode, val_cr)
-                ax3_legends.append(models[i])
+                # ax3_legends.append(models[i])
+                ax3_legends.append("Validation")
 
             ax3.legend(ax3_legends)
             ax3.set_xlabel('Episodes')
@@ -130,10 +145,12 @@ def main():
                 _, ax4 = plt.subplots()
             if args.plot_train:
                 ax4.plot(range(len(train_reward_smooth)), train_reward_smooth)
-                ax4_legends.append(models[i])
+                # ax4_legends.append(models[i])
+                ax4_legends.append("Training")
             if args.plot_val:
                 ax4.plot(val_episode, val_reward)
-                ax4_legends.append(models[i])
+                # ax4_legends.append(models[i])
+                ax4_legends.append("Validation")
 
             ax4.legend(ax4_legends)
             ax4.set_xlabel('Episodes')
@@ -141,6 +158,7 @@ def main():
             ax4.set_title('Cumulative Discounted Reward')
 
     plt.show()
+
 
 
 if __name__ == '__main__':

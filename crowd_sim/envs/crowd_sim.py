@@ -632,49 +632,49 @@ class CrowdSim(gym.Env):
         prev_dets = prev_dets_xy.copy()
         dets = dets_xy.copy()
         # transform from (-6,6) to (0,12)
-        prev_dets += 6.
-        prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
-        dets += 6.
+        # prev_dets += 6.
+        # prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
+        # dets += 6.
 
-        # image of previous frame
-        prev_frame = np.zeros((32,32,3), dtype=np.float32)
-        for i in range(len(prev_dets)):
-            item = prev_dets[i]
-            x, y = item[0]
-            x = int(x)
-            y = int(y)
-            prev_frame[x][y] = 255. - (i*10)
-        prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+        # # image of previous frame
+        # prev_frame = np.zeros((32,32,3), dtype=np.float32)
+        # for i in range(len(prev_dets)):
+        #     item = prev_dets[i]
+        #     x, y = item[0]
+        #     x = int(x)
+        #     y = int(y)
+        #     prev_frame[x][y] = 255. - (i*10)
+        # prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
 
-        # image of current frame
-        curr_frame = np.zeros((32,32,3), dtype=np.float32)
-        for i in range(len(dets)):
-            item = dets[i]
-            x, y = item
-            x = int(x)
-            y = int(y)
-            curr_frame[x][y] = 255. - (i*10)
-        curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+        # # image of current frame
+        # curr_frame = np.zeros((32,32,3), dtype=np.float32)
+        # for i in range(len(dets)):
+        #     item = dets[i]
+        #     x, y = item
+        #     x = int(x)
+        #     y = int(y)
+        #     curr_frame[x][y] = 255. - (i*10)
+        # curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
 
-        # print("SHAPES")
-        # print(prev_frame.shape)
-        # print(curr_frame.shape)
-        prev_frame = np.uint8(prev_frame)
-        curr_frame = np.uint8(curr_frame)
-        # optical flow predicts positions of current detections
-        # preserving ordering of prev_dets
-        lk_params = dict( winSize  = (15, 15),
-                        maxLevel = 2,
-                        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-        OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
+        # # print("SHAPES")
+        # # print(prev_frame.shape)
+        # # print(curr_frame.shape)
+        # prev_frame = np.uint8(prev_frame)
+        # curr_frame = np.uint8(curr_frame)
+        # # optical flow predicts positions of current detections
+        # # preserving ordering of prev_dets
+        # lk_params = dict( winSize  = (15, 15),
+        #                 maxLevel = 2,
+        #                 criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+        # OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
 
-        # next_pos_preds = OF_preds[st==1]
-        next_pos_preds = OF_preds
-        assert len(next_pos_preds) == len(dets)
+        # # next_pos_preds = OF_preds[st==1]
+        # next_pos_preds = OF_preds
+        # assert len(next_pos_preds) == len(dets)
 
         # match OF preds with current detections with hungarian algorithm
         # cost matrix
-        n = len(next_pos_preds)
+        n = len(prev_dets)
         costs = np.zeros((n, n))
         #            det1 det2 ...
         # of_pred1
@@ -682,10 +682,12 @@ class CrowdSim(gym.Env):
         # ...
 
         for i in range(n):
-            of_pred = next_pos_preds[i]
+            # of_pred = next_pos_preds[i]
+            prev_det = prev_dets[i]
             for j in range(n):
                 det = dets[j]
-                dist = distance.euclidean(of_pred, det)
+                # dist = distance.euclidean(of_pred, det)
+                dist = distance.euclidean(prev_det, det)
                 costs[i][j] = dist
 
         row_ind, col_ind = linear_sum_assignment(costs)
@@ -932,6 +934,9 @@ class CrowdSim(gym.Env):
             self.agent_prev_vx = action.v * np.cos(action.r + self.robot.theta)
             self.agent_prev_vy = action.v * np.sin(action.r + self.robot.theta)
 
+        # print("info:",info)
+        # print(type(info))
+        # print("ob:",ob)
         return ob, reward, done, info
 
     def render(self, mode='human', output_file=None):
