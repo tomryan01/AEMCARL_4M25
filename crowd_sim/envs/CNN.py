@@ -23,6 +23,20 @@ class CNN(nn.Module):
             self.conv_output_shape = self._get_conv_output_shape(input_shape)
 
         self.fc = nn.Linear(self.conv_output_shape, 65)
+    
+    def _get_conv_output_shape(self, shape):
+        #Helper function to calculate the output shape of the convolutional layers
+        x = torch.rand(*shape)
+        print(x.size())
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.maxpool1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.bn2(x)
+
+        return self.flatten(x).shape[1]
             
     def forward(self, x):
         x = self.conv1(x)
@@ -38,23 +52,9 @@ class CNN(nn.Module):
         x = self.fc(x)
         
         return x.squeeze(1)
-    
-    def _get_conv_output_shape(self, shape):
-        """Helper function to calculate the output shape of the convolutional layers."""
-        x = torch.rand(*shape)
-        print(x.size())
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.bn1(x)
-        x = self.maxpool1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.bn2(x)
-
-        return self.flatten(x).shape[1]
 
 
-
+#passing the image through to test whether it works
 def run (image_np):  
     # loaded_arr = np.loadtxt("/home/iman/demofile2.txt")
     # image_np = loaded_arr.reshape(

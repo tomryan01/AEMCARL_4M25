@@ -861,7 +861,9 @@ class CrowdSim(gym.Env):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
                 image = self.construct_img(self.lidar_scans)
-                run(image)
+                
+                # cnn test
+                # run(image)
 
                 # arr_reshaped = image.reshape(image.shape[0], -1)
                 # # saving reshaped array to file.
