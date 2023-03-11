@@ -574,6 +574,8 @@ class CrowdSim(gym.Env):
         # Display the image
         plt.imshow(depth_image)
         plt.show()
+
+        return depth_image
     
     def scan_to_points(self, scan):
         coords = []
@@ -854,11 +856,14 @@ class CrowdSim(gym.Env):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
 
-            if(np.shape(self.lidar_scans)[0] == 59 ):
+            if(done):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
-            #    and np.shape(self.lidar_scans)[0]%10 == 0):
-                self.construct_img(self.lidar_scans)
+                # image = self.construct_img(self.lidar_scans)
+
+                # arr_reshaped = image.reshape(image.shape[0], -1)
+                # # saving reshaped array to file.
+                # np.savetxt("/home/iman/demofile2.txt", arr_reshaped)
                 
             # print(self.time_step)
             # with open('/home/sharday/adv_robotics/DROW/v1/test_' + str(self.time_step) + '.npy', 'wb') as f:
