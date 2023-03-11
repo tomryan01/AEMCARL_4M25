@@ -20,6 +20,7 @@ from dr_spaam.detector import Detector
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
+from crowd_sim.envs.CNN import run
 
 # dr_model_file = 'trained_models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth'
 dr_model_file = 'trained_models/ckpt_jrdb_ann_drow3_e40.pth'
@@ -859,7 +860,8 @@ class CrowdSim(gym.Env):
             if(done):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
-                # image = self.construct_img(self.lidar_scans)
+                image = self.construct_img(self.lidar_scans)
+                run(image)
 
                 # arr_reshaped = image.reshape(image.shape[0], -1)
                 # # saving reshaped array to file.
