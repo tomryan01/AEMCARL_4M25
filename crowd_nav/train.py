@@ -196,7 +196,7 @@ def main():
 
         print("il_policy: ", type(il_policy))
         robot.set_policy(il_policy)
-        explorer.run_k_episodes(200, "train", update_memory=True, imitation_learning=True)
+        explorer.run_k_episodes(10, "train", update_memory=True, imitation_learning=True) #200
 
         trainer.optimize_epoch(il_epochs)
 
@@ -229,10 +229,10 @@ def main():
 
         # evaluate the model
         if episode % (evaluation_interval) == 0:
-            explorer.run_k_episodes(env.case_size["val"]/2, "val", episode=episode, lidar_images=True)
+            explorer.run_k_episodes(int(env.case_size["val"]/2), "val", episode=episode, lidar_images=True)
 
         # sample k episodes into memory and optimize over the generated memory
-        explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode)
+        explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode) # sample_episodes
         trainer.optimize_batch(train_batches)
         episode += 1
 
@@ -243,6 +243,7 @@ def main():
             explorer.update_target_model(model)
 
         if episode != 0 and episode % checkpoint_interval == 0:
+        # if episode > 0:
             # rl_weight_file_name = 'rl_model_' + str(episode)  + '.pth'
             rl_weight_file_name = "rl_model_{:d}.pth".format(episode)
             rl_weight_file = os.path.join(args.output_dir, rl_weight_file_name)

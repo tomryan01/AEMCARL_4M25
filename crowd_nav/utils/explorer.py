@@ -41,7 +41,7 @@ class Explorer(object):
         collision_cases = []
         timeout_cases = []
         time_begin = 0
-
+        
         for i in range(k):
             time_begin = t.time()
             ob, lidar_img = self.env.reset(phase)

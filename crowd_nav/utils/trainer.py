@@ -43,11 +43,27 @@ class Trainer(object):
             self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True, drop_last=True)
         average_epoch_loss = 0
         for epoch in range(num_epochs):  #
+            print("OPTIMIZE_EPOCH")
             epoch_loss = 0
+            n = 0
             for data in self.data_loader:
-                inputs, values = data
+                # for _ in range(num_batches):
+                #     inputs, values = data
+                #     inputs = Variable(inputs)
+                #     values = Variable(values)
+
+                #     self.optimizer.zero_grad()
+                #     outputs, _ = self.model(inputs)
+                #     loss = self.criterion(outputs, values)
+                try:
+                    inputs, values = next(iter(self.data_loader))
+                except StopIteration:
+                    continue
+                n += 1
                 inputs = Variable(inputs)
                 values = Variable(values)
+                print("inputs:",inputs.size())
+                print("values:",inputs.size())
 
                 self.optimizer.zero_grad()  #Clears the gradients of all optimized torch.Tensors.
                 outputs, _ = self.model(inputs)
@@ -57,9 +73,12 @@ class Trainer(object):
                 epoch_loss += loss.data.item(
                 )  #Returns the value of this tensor as a standard Python number. This only works for tensors with one element. For other cases, see tolist().
 
-            average_epoch_loss = epoch_loss / len(self.memory)
-            logging.debug('Average loss in epoch %d: %.2E', epoch, average_epoch_loss)
-
+            if n > 0:
+                average_epoch_loss = epoch_loss / n
+                logging.debug('Average loss in epoch %d: %.2E', epoch, average_epoch_loss)
+            else:
+                average_loss = 0
+                
         return average_epoch_loss
 
     def optimize_batch(self, num_batches):
@@ -68,8 +87,12 @@ class Trainer(object):
         if self.data_loader is None:
             self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True)
         losses = 0
+        n = 0
         for _ in range(num_batches):
-            inputs, values = next(iter(self.data_loader))
+            try:
+                inputs, values = next(iter(self.data_loader))
+            except StopIteration:
+                continue
             inputs = Variable(inputs)
             values = Variable(values)
 
@@ -79,9 +102,13 @@ class Trainer(object):
             loss.backward()
             self.optimizer.step()
             losses += loss.data.item()
+            n += 1
 
-        average_loss = losses / num_batches
-        logging.debug('Average loss : %.2E', average_loss)
+        if n > 0:
+            average_loss = losses / n
+            logging.debug('Average loss : %.2E', average_loss)
+        else:
+            average_loss = 0
 
         return average_loss
 

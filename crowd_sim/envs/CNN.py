@@ -86,7 +86,7 @@ def get_embedding(lidar_image, model):
         transforms.ToTensor()
     ])
 
-    image_tensor = transform(lidar_image).type(torch.float32).unsqueeze(0)
+    image_tensor = transform(lidar_image).type(torch.float32).unsqueeze(0).cuda()
     
     if model is None:
         inp_size = torch.Size([1, 4, 10, 450])
