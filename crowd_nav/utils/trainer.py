@@ -36,7 +36,7 @@ class Trainer(object):
             print("Not support optimizer: ", optimizer_type)
             self.optimizer = optim.SGD(self.model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=0.00)
 
-    def optimize_epoch(self, num_epochs):
+    def optimize_epoch(self, num_epochs, lidar_image, state):
         if self.optimizer is None:
             raise ValueError('Learning rate is not set!')
         if self.data_loader is None:
@@ -66,7 +66,8 @@ class Trainer(object):
                 print("values:",inputs.size())
 
                 self.optimizer.zero_grad()  #Clears the gradients of all optimized torch.Tensors.
-                outputs, _ = self.model(inputs)
+                # print("ERROR HERE")
+                outputs, _ = self.model(state, lidar_image)
                 loss = self.criterion(outputs, values)  #Compute MSELoss
                 loss.backward()
                 self.optimizer.step()  # updates the parameters after the  gradients are computed using e.g. backward().

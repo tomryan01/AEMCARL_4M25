@@ -41,7 +41,7 @@ class Explorer(object):
         collision_cases = []
         timeout_cases = []
         time_begin = 0
-        
+
         for i in range(k):
             time_begin = t.time()
             ob, lidar_img = self.env.reset(phase)
@@ -101,7 +101,6 @@ class Explorer(object):
                     pow(self.gamma, t * self.robot.time_step * self.robot.v_pref) * reward
                     for t, reward in enumerate(rewards)
                 ]))
-
             print("i/k: %d/%d, robot pos: %s, %s, time consuming is:%s secs. %s " %
                   (i, k, self.robot.px, self.robot.py, t.time() - time_begin, info.__str__()))
 
@@ -127,6 +126,7 @@ class Explorer(object):
         if print_failure:
             logging.info('Collision cases: ' + ' '.join([str(x) for x in collision_cases]))
             logging.info('Timeout cases: ' + ' '.join([str(x) for x in timeout_cases]))
+        return lidar_img, self.robot
 
     def update_memory(self, states, actions, rewards, imitation_learning=False):
         if self.memory is None or self.gamma is None:

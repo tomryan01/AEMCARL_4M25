@@ -654,21 +654,22 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         '''
         batch_size * seq_len * feature_size
         '''
-        # sys.exit()
         # print(state)
         # print("ORIGINAL STATE:",state.size())
 
-        # self.model_cnn, lidar_embedding = get_embedding(lidar_image, self.model_cnn)
-        # temporarily don't use model
+        # _, lidar_embedding = get_embedding(lidar_image, self.cnn_model)
+        # # temporarily don't use model
         # print("lidar image:",lidar_image.shape)
         # plt.imshow(lidar_image)
         # plt.show()
 
+        
+        # if(lidar_image):
         _, lidar_embedding = get_embedding(lidar_image, self.cnn_model)
+        
         # _, lidar_embedding = get_embedding(lidar_image, None)
         lidar_embedding = torch.reshape(lidar_embedding, (1,5,13)).to(self.device)
         # reshape embedding to 5 x 13
-
 
         #   0   1       2       3       4   5   6   7     8    9    10      11      12
         # [dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum]

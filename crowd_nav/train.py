@@ -196,9 +196,9 @@ def main():
 
         print("il_policy: ", type(il_policy))
         robot.set_policy(il_policy)
-        explorer.run_k_episodes(10, "train", update_memory=True, imitation_learning=True) #200
-
-        trainer.optimize_epoch(il_epochs)
+        lidar_image, state = explorer.run_k_episodes(10, "train", update_memory=True, imitation_learning=True) #200
+        # print(lidar_image, state)
+        trainer.optimize_epoch(il_epochs, lidar_image, state)
 
         torch.save(model.state_dict(), il_weight_file)
         logging.info("Finish imitation learning. Weights saved.")
