@@ -79,7 +79,7 @@ class ORCA(Policy):
     def set_phase(self, phase):
         return
 
-    def predict(self, state):
+    def predict(self, state, lidar_image=None):
         """
         Create a rvo2 simulation at each time step and run one step
         Python-RVO2 API: https://github.com/sybrenstuvel/Python-RVO2/blob/master/src/rvo2.pyx

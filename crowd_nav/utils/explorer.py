@@ -25,7 +25,8 @@ class Explorer(object):
                        update_memory=False,
                        imitation_learning=False,
                        episode=None,
-                       print_failure=False):
+                       print_failure=False,
+                       lidar_images=True):
         # logging("run episodes: %d"%(k))
         self.robot.policy.set_phase(phase)
         success_times = []
@@ -43,17 +44,33 @@ class Explorer(object):
 
         for i in range(k):
             time_begin = t.time()
-            ob = self.env.reset(phase)
+            ob, lidar_img = self.env.reset(phase)
+            # ob, lidar_img = env.reset(args.phase, args.test_case)
             done = False
             states = []
             actions = []
             rewards = []
             while not done:
-                action = self.robot.act(ob)
-                ob, reward, done, info = self.env.step(action)
-                states.append(self.robot.policy.last_state)
-                actions.append(action)
-                rewards.append(reward)
+
+                            
+                            
+                if lidar_images:
+                    action = self.robot.act(ob, lidar_img)
+                    ob, lidar_img, reward, done, info = self.env.step(action)
+                    # current_pos = np.array(self.robot.get_position())
+                    # logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)
+                    # last_pos = current_pos
+
+                    states.append(self.robot.policy.last_state)
+                    actions.append(action)
+                    rewards.append(reward)
+                else:
+                    action = self.robot.act(ob)
+                    ob, reward, done, info = self.env.step(action)
+                    states.append(self.robot.policy.last_state)
+                    actions.append(action)
+                    rewards.append(reward)
+
 
                 if isinstance(info, Danger):
                     too_close += 1

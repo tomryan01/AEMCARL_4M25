@@ -1,0 +1,6 @@
+2023-03-11 22:05:24, INFO: Using device: cuda:0
+2023-03-11 22:05:26, INFO: human number: 5
+2023-03-11 22:05:26, INFO: Not randomize human's radius and preferred speed
+2023-03-11 22:05:26, INFO: Training simulation: circle_crossing, test simulation: circle_crossing
+2023-03-11 22:05:26, INFO: Square width: 10.0, circle width: 4.0
+2023-03-11 22:05:26, INFO: Current learning rate: 0.010000,Optimizer Type Adam

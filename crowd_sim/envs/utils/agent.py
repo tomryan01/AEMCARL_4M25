@@ -81,10 +81,13 @@ class Agent(object):
         # compute angle of vector
         theta = np.arctan2(r[1], r[0])
         # compute angles to each edge of agent from robot
-        dtheta = np.arcsin(self.radius / np.linalg.norm(r))
+        c_dtheta = self.radius / np.linalg.norm(r)
+        c_dtheta = np.clip(c_dtheta, -1, 1)
+        dtheta = np.arcsin(c_dtheta)
         max_theta = theta + dtheta
         min_theta = theta - dtheta
         # compute angles in range matching resolution constraint
+
         angle_indexes = np.array(range(int(np.ceil(min_theta*resolution/(2*np.pi))), int(np.ceil(max_theta*resolution/(2*np.pi)))))
         angles = angle_indexes * 2 * np.pi / resolution
         # compute distances at each angle
@@ -115,7 +118,7 @@ class Agent(object):
         self.vy = velocity[1]
 
     @abc.abstractmethod
-    def act(self, ob):
+    def act(self, ob, lidar_image=None):
         """
         Compute state using received observation and pass it to policy
 

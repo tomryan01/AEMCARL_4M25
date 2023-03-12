@@ -10,7 +10,7 @@ from numpy.linalg import norm
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import *
 from crowd_sim.envs.utils.utils import point_to_segment_dist
-from crowd_sim.envs.utils.state import FullState
+from crowd_sim.envs.utils.state import FullState, ObservableState
 from scipy.stats import norm as norm_pdf
 from numba import jit, cuda
 import math
@@ -20,7 +20,8 @@ from dr_spaam.detector import Detector
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
 import matplotlib.pyplot as plt
-from crowd_sim.envs.CNN import run
+from crowd_sim.envs.CNN import run, CNN, get_embedding
+import torch
 
 # dr_model_file = 'trained_models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth'
 dr_model_file = 'trained_models/ckpt_jrdb_ann_drow3_e40.pth'
@@ -281,6 +282,9 @@ class CrowdSim(gym.Env):
 
         self.lidar_scans = None
         self.previous_angle = 0.0
+        self.lidar_image = None
+        self.cnn_input_shape = torch.Size([1, 4, 10, 450])
+        self.model_cnn = CNN(self.cnn_input_shape)
         
 
     def configure(self, config):
@@ -556,12 +560,12 @@ class CrowdSim(gym.Env):
         self.previous_angle = heading_angle
         shifted = scan + (rotation+np.pi)/(4*np.pi)
 
-        print("ROT:", rotation)
+        # print("ROT:", rotation)
 
         return shifted
         
     def construct_img (self, scans):
-       
+        assert len(scans) == 10
         # Normalize 
         d_min = np.min(scans)
         d_max = np.max(scans)
@@ -570,13 +574,29 @@ class CrowdSim(gym.Env):
         # Create the image 
         cmap = plt.cm.viridis
         depth_image = cmap(intensities)
-        print(np.shape(depth_image))
+        # print(np.shape(depth_image))
 
         # Display the image
-        plt.imshow(depth_image)
-        plt.show()
+        # plt.imshow(depth_image)
+        # plt.show()
 
         return depth_image
+
+    def construct_blank_img(self):
+
+        intensities = np.zeros((10,450)).astype(np.uint8)
+
+        # Create the image 
+        cmap = plt.cm.viridis
+        depth_image = cmap(intensities)
+        # print(np.shape(depth_image))
+
+        # Display the image
+        # plt.imshow(depth_image)
+        # plt.show()
+
+        return depth_image
+
     
     def scan_to_points(self, scan):
         coords = []
@@ -655,17 +675,36 @@ class CrowdSim(gym.Env):
             self.attention_weights = list()
 
         # get current observation
+        lidar_image = None
         if self.robot.sensor == 'coordinates':
             ob = [human.get_observable_state() for human in self.humans]
         elif self.robot.sensor == 'lidar':
             ob = [human.get_detected_state() for human in self.humans]
+        elif self.robot.sensor == 'lidar_images': 
+            # todo: take human angles and put into some sort of observation - what does that mean for our case?
+            # human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+            ob = [self.generate_random_state() for i in range(len(self.humans))] 
+            
+            if lidar_image is None:
+                lidar_image = self.construct_blank_img()
+            else:
+                lidar_image = self.lidar_image
+            # print(ob)
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
-        return ob
+        # print(lidar_image.shape)
+        return ob, lidar_image
+
+    def generate_random_state(self):
+        return ObservableState(0,0,0,0, 0)
 
     def onestep_lookahead(self, action, rebuild=True):
-        return self.step(action, update=False, rebuild=rebuild)
+        if self.robot.sensor == 'lidar_images': 
+            update=True
+        else:
+            update=False
+        return self.step(action, update=update, rebuild=rebuild)
 
     def find_assignment(self, prev_dets_xy, dets_xy):
         # find OF predictions for next positions based on prev detections
@@ -673,49 +712,49 @@ class CrowdSim(gym.Env):
         prev_dets = prev_dets_xy.copy()
         dets = dets_xy.copy()
         # transform from (-6,6) to (0,12)
-        prev_dets += 6.
-        prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
-        dets += 6.
+        # prev_dets += 6.
+        # prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
+        # dets += 6.
 
-        # image of previous frame
-        prev_frame = np.zeros((32,32,3), dtype=np.float32)
-        for i in range(len(prev_dets)):
-            item = prev_dets[i]
-            x, y = item[0]
-            x = int(x)
-            y = int(y)
-            prev_frame[x][y] = 255. - (i*10)
-        prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+        # # image of previous frame
+        # prev_frame = np.zeros((32,32,3), dtype=np.float32)
+        # for i in range(len(prev_dets)):
+        #     item = prev_dets[i]
+        #     x, y = item[0]
+        #     x = int(x)
+        #     y = int(y)
+        #     prev_frame[x][y] = 255. - (i*10)
+        # prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
 
-        # image of current frame
-        curr_frame = np.zeros((32,32,3), dtype=np.float32)
-        for i in range(len(dets)):
-            item = dets[i]
-            x, y = item
-            x = int(x)
-            y = int(y)
-            curr_frame[x][y] = 255. - (i*10)
-        curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+        # # image of current frame
+        # curr_frame = np.zeros((32,32,3), dtype=np.float32)
+        # for i in range(len(dets)):
+        #     item = dets[i]
+        #     x, y = item
+        #     x = int(x)
+        #     y = int(y)
+        #     curr_frame[x][y] = 255. - (i*10)
+        # curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
 
-        # print("SHAPES")
-        # print(prev_frame.shape)
-        # print(curr_frame.shape)
-        prev_frame = np.uint8(prev_frame)
-        curr_frame = np.uint8(curr_frame)
-        # optical flow predicts positions of current detections
-        # preserving ordering of prev_dets
-        lk_params = dict( winSize  = (15, 15),
-                        maxLevel = 2,
-                        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-        OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
+        # # print("SHAPES")
+        # # print(prev_frame.shape)
+        # # print(curr_frame.shape)
+        # prev_frame = np.uint8(prev_frame)
+        # curr_frame = np.uint8(curr_frame)
+        # # optical flow predicts positions of current detections
+        # # preserving ordering of prev_dets
+        # lk_params = dict( winSize  = (15, 15),
+        #                 maxLevel = 2,
+        #                 criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+        # OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
 
-        # next_pos_preds = OF_preds[st==1]
-        next_pos_preds = OF_preds
-        assert len(next_pos_preds) == len(dets)
+        # # next_pos_preds = OF_preds[st==1]
+        # next_pos_preds = OF_preds
+        # assert len(next_pos_preds) == len(dets)
 
         # match OF preds with current detections with hungarian algorithm
         # cost matrix
-        n = len(next_pos_preds)
+        n = len(prev_dets)
         costs = np.zeros((n, n))
         #            det1 det2 ...
         # of_pred1
@@ -723,10 +762,12 @@ class CrowdSim(gym.Env):
         # ...
 
         for i in range(n):
-            of_pred = next_pos_preds[i]
+            # of_pred = next_pos_preds[i]
+            prev_det = prev_dets[i]
             for j in range(n):
                 det = dets[j]
-                dist = distance.euclidean(of_pred, det)
+                # dist = distance.euclidean(of_pred, det)
+                dist = distance.euclidean(prev_det, det)
                 costs[i][j] = dist
 
         row_ind, col_ind = linear_sum_assignment(costs)
@@ -738,11 +779,14 @@ class CrowdSim(gym.Env):
         return col_ind
 
 
+
     def step(self, action, update=True, rebuild=True):
         """
         Compute actions for all agents, detect collision, update environment and return (ob, reward, done, info)
 
         """
+        # print("update is",update)
+
         human_actions = []
         for human in self.humans:
             # observation for humans is always coordinates
@@ -852,16 +896,43 @@ class CrowdSim(gym.Env):
                 heading_angle = atan2(delta_y, delta_x)
                 self.previous_angle = heading_angle
             
-
+            lidar_image = None
+            # print("NUM LIDAR SCANS:",len(self.lidar_scans))
             if(self.global_time != 0):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
+                if len(self.lidar_scans) >= 10:
+                    latest_scans = self.lidar_scans[-10:]
+                    # print("scans shape:",len(latest_scans))
+                    lidar_image = self.construct_img(latest_scans)
 
+                    # plt.imshow(lidar_image)
+                    # plt.show()
+                    # lidar_embedding = run(lidar_image)
+                    # _, lidar_embedding = get_embedding(lidar_image, self.model_cnn)
+                    # print("lidar_embedding:",lidar_embedding)
+                    # print(lidar_embedding.shape)
+
+            
             if(done):
                 scan_app = self.shift_scan(scan, time_step)
                 self.lidar_scans.append(scan_app)
-                image = self.construct_img(self.lidar_scans)
+                if len(self.lidar_scans) >= 10:
+                    latest_scans = self.lidar_scans[-10:]
+                    lidar_image = self.construct_img(latest_scans)
+                else:
+                    lidar_image = self.construct_blank_img()
+                # print("scans shape:",len(latest_scans))
                 
+            
+            if lidar_image is None:
+                lidar_image = self.construct_blank_img()
+                # print("had to construct blank img")
+
+
+
+            # print("Image shape:",lidar_image.shape)
+            self.lidar_image = lidar_image
                 # cnn test
                 # run(image)
 
@@ -969,6 +1040,7 @@ class CrowdSim(gym.Env):
                 if self.human_times[i] == 0 and human.reached_destination():
                     self.human_times[i] = self.global_time
 
+            # lidar_image = None
             # compute the observation
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_observable_state() for human in self.humans]
@@ -976,6 +1048,17 @@ class CrowdSim(gym.Env):
                 # todo: take human angles and put into some sort of observation - what does that mean for our case?
                 # human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
                 ob = [human.get_detected_state() for human in self.humans]
+
+            elif self.robot.sensor == 'lidar_images':
+                # todo: take human angles and put into some sort of observation - what does that mean for our case?
+                # human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+                # print("setting img")
+                ob = [self.generate_random_state() for i in range(len(self.humans))] 
+                
+                if lidar_image is None:
+                    lidar_image = self.construct_blank_img()
+                # else:
+                #     lidar_image = self.lidar_image
                 # print(ob)
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
@@ -994,7 +1077,14 @@ class CrowdSim(gym.Env):
             self.agent_prev_vx = action.v * np.cos(action.r + self.robot.theta)
             self.agent_prev_vy = action.v * np.sin(action.r + self.robot.theta)
 
-        return ob, reward, done, info
+        # print(self.robot.sensor )
+        # print(update)
+        # for o in ob:
+        #     print(str(o))
+        # plt.imshow(lidar_image)
+        # plt.show()
+
+        return ob, lidar_image, reward, done, info
 
     def render(self, mode='human', output_file=None):
         from matplotlib import animation

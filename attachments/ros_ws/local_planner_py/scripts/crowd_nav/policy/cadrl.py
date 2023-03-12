@@ -172,7 +172,7 @@ class CADRL(Policy):
 
         return next_state
 
-    def predict(self, state):
+    def predict(self, state, lidar_image=None):
         """
         Input state is the joint state of robot concatenated by the observable state of other agents
 

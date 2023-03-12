@@ -180,7 +180,7 @@ class CADRL(Policy):
 
         return next_state
 
-    def predict(self, state):
+    def predict(self, state, lidar_image=None):
         """
         Input state is the joint state of robot concatenated by the observable state of other agents
 
@@ -207,7 +207,7 @@ class CADRL(Policy):
             max_action = None
             for action in self.action_space:
                 next_self_state = self.propagate(state.self_state, action)
-                ob, reward, done, info = self.env.onestep_lookahead(action)
+                ob, _, reward, done, info = self.env.onestep_lookahead(action)
                 batch_next_states = torch.cat([torch.Tensor([next_self_state + next_human_state]).to(self.device)
                                               for next_human_state in ob], dim=0)
                 # VALUE UPDATE

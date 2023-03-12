@@ -23,6 +23,7 @@ crowd_nav/utils/plot.py
 crowd_nav/utils/trainer.py
 crowd_nav/utils/utils.py
 crowd_sim/__init__.py
+crowd_sim/envs/CNN.py
 crowd_sim/envs/__init__.py
 crowd_sim/envs/crowd_sim.py
 crowd_sim/envs/crowd_sim_video.py

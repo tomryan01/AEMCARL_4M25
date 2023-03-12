@@ -131,6 +131,7 @@ def main():
     env_config.set("reward", "reward_increment", reward_increment)
     env_config.set("reward", "position_variance", position_variance)
     env_config.set("reward", "direction_variance", direction_variance)
+    env_config.set("robot", "sensor", "lidar_images")
     env = gym.make("CrowdSim-v0")
     env.configure(env_config)
 
@@ -155,6 +156,8 @@ def main():
     epsilon_end = train_config.getfloat("train", "epsilon_end")
     epsilon_decay = train_config.getfloat("train", "epsilon_decay")
     checkpoint_interval = train_config.getint("train", "checkpoint_interval")
+
+    
 
     # configure trainer and explorer
     memory = ReplayMemory(capacity)
@@ -225,13 +228,16 @@ def main():
         robot.policy.set_epsilon(epsilon)
 
         # evaluate the model
-        if episode % evaluation_interval == 0:
-            explorer.run_k_episodes(env.case_size["val"], "val", episode=episode)
+        if episode % (evaluation_interval) == 0:
+            explorer.run_k_episodes(env.case_size["val"]/2, "val", episode=episode, lidar_images=True)
 
         # sample k episodes into memory and optimize over the generated memory
         explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode)
         trainer.optimize_batch(train_batches)
         episode += 1
+
+        # if robot.sensor == 'lidar_images':
+        #     trainer.backpropagate_CNN()
 
         if episode % target_update_interval == 0:
             explorer.update_target_model(model)
@@ -243,7 +249,7 @@ def main():
             torch.save(model.state_dict(), rl_weight_file, _use_new_zipfile_serialization=False)
 
     # final test
-    explorer.run_k_episodes(env.case_size["test"], "test", episode=episode)
+    explorer.run_k_episodes(env.case_size["test"], "test", episode=episode, lidar_images=True)
 
 
 if __name__ == "__main__":

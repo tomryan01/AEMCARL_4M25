@@ -59,18 +59,46 @@ def run (image_np):
     # loaded_arr = np.loadtxt("/home/iman/demofile2.txt")
     # image_np = loaded_arr.reshape(
     #     loaded_arr.shape[0], loaded_arr.shape[1] // 4, 4)
-
+    # print("image shape:",image_np.shape)
     transform = transforms.Compose([
         transforms.ToTensor()
     ])
 
     image_tensor = transform(image_np).type(torch.float32).unsqueeze(0)
 
-    model = CNN(image_tensor.size())
+    # print(type(image_tensor.size()))
+    # print(image_tensor.size())
+    inp_size = torch.Size([1, 4, 10, 450])
+    # model = CNN(image_tensor.size())
+    model = CNN(inp_size)
     image_np = np.array(image_np).astype(np.float32)
     model.eval()
 
     with torch.no_grad():
         output = model(image_tensor) 
 
-    print(output)
+    return output
+
+def get_embedding(lidar_image, model):
+
+    # print("lidar image shape:",lidar_image.shape)
+    transform = transforms.Compose([
+        transforms.ToTensor()
+    ])
+
+    image_tensor = transform(lidar_image).type(torch.float32).unsqueeze(0)
+    
+    if model is None:
+        inp_size = torch.Size([1, 4, 10, 450])
+        # model = CNN(image_tensor.size())
+        model = CNN(inp_size)
+
+    lidar_image = np.array(lidar_image).astype(np.float32)
+    model.eval()
+
+    with torch.no_grad():
+        output = model(image_tensor) 
+
+    return model, output
+
+

@@ -9,6 +9,8 @@ from crowd_nav.common.components import ATC_TFencoder, mlp
 from crowd_nav.common.components import ATCBasic
 from crowd_nav.common.components import ATCBasicTfencoder
 from enum import IntEnum
+from crowd_sim.envs.CNN import run, CNN, get_embedding
+import matplotlib.pyplot as plt
 
 # from torch.nn import TransformerEncoder
 # from torch.nn import TransformerDecoder
@@ -609,6 +611,8 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         self.with_global_state = with_global_state
         self.sort_mlp_attention = sort_mlp_attention
         self.sort_mlp_global_state_dim = sort_mlp_dims[-1]
+        self.cnn_input_shape = torch.Size([1, 4, 10, 450]) 
+        self.cnn_model = CNN(self.cnn_input_shape)
 
         self.act_fixed = act_fixed
         self.act_steps = act_steps
@@ -634,31 +638,92 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         self.attention_weights = None
         self.step_cnt = 0
 
+
+    def init_xavier_uniform(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
+        
+# irn.apply(init_xavier_uniform)
     def get_step_cnt(self):
         return self.step_cnt
         pass
 
-    def forward(self, state: torch.Tensor):
+
+    def forward(self, state: torch.Tensor, lidar_image=None):
         '''
         batch_size * seq_len * feature_size
         '''
+        # sys.exit()
+        # print(state)
+        # print("ORIGINAL STATE:",state.size())
+
+        # self.model_cnn, lidar_embedding = get_embedding(lidar_image, self.model_cnn)
+        # temporarily don't use model
+        # print("lidar image:",lidar_image.shape)
+        # plt.imshow(lidar_image)
+        # plt.show()
+
+        _, lidar_embedding = get_embedding(lidar_image, self.cnn_model)
+        # _, lidar_embedding = get_embedding(lidar_image, None)
+        lidar_embedding = torch.reshape(lidar_embedding, (1,5,13)).to(self.device)
+        # reshape embedding to 5 x 13
+
+
         #   0   1       2       3       4   5   6   7     8    9    10      11      12
         # [dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum]
+        
+        # self_state = state[:, 0, :self.self_state_dim].clone().detach()  # 500 x 6 (100 x 5 x 6)
+
+        
+        # self_agent_state = state[:, 0, :].clone().detach()
+        # self_agent_state = self_agent_state.view(self_agent_state.shape[0], -1, self_agent_state.shape[1])
+        # self_agent_state[:, 0, 6] = 0.0
+        # self_agent_state[:, 0, 7] = 0.0
+        # self_agent_state[:, 0, 8] = self_agent_state[:, 0, 4]
+        # self_agent_state[:, 0, 9] = self_agent_state[:, 0, 5]
+        # self_agent_state[:, 0, 10] = self_agent_state[:, 0, 3]
+        # self_agent_state[:, 0, 11] = 0.0
+        # self_agent_state[:, 0, 12] = self_agent_state[:, 0, 3]
+
+        self_agent_state = torch.zeros(13, device=self.device)
+        self_agent_state[0] = 0
+        self_agent_state[1] = state.v_pref
+        self_agent_state[2] = state.theta
+        self_agent_state[3] = state.radius
+        self_agent_state[4] = state.vx
+        self_agent_state[5] = state.vy
+        self_agent_state[6] = state.px
+        self_agent_state[7] = state.py
+        self_agent_state[8] = 0
+        self_agent_state[9] = 0
+        self_agent_state[10] = state.radius
+        self_agent_state[11] = 0
+        self_agent_state[12] = 0
+        self_agent_state = self_agent_state.resize_(1,1,13)
+
+        # 1, 6
+        self_state = torch.zeros(6, device=self.device)
+        self_state[0] = state.theta
+        self_state[1] = state.radius
+        self_state[2] = state.vx
+        self_state[3] = state.vy
+        self_state[4] = state.px
+        self_state[5] = state.py
+        self_state = self_state.unsqueeze(0)
+
+
+        # print("sizes")
+        # print(self_agent_state.size())
+        # print(self_state.size())
+
+        # print("self_agent_state STATE:",self_agent_state.size())
+
+        state = lidar_embedding.clone().detach()
         size = state.shape
-        self_state = state[:, 0, :self.self_state_dim].clone().detach()  # 500 x 6 (100 x 5 x 6)
 
-        
-        self_agent_state = state[:, 0, :].clone().detach()
-        self_agent_state = self_agent_state.view(self_agent_state.shape[0], -1, self_agent_state.shape[1])
-        self_agent_state[:, 0, 6] = 0.0
-        self_agent_state[:, 0, 7] = 0.0
-        self_agent_state[:, 0, 8] = self_agent_state[:, 0, 4]
-        self_agent_state[:, 0, 9] = self_agent_state[:, 0, 5]
-        self_agent_state[:, 0, 10] = self_agent_state[:, 0, 3]
-        self_agent_state[:, 0, 11] = 0.0
-        self_agent_state[:, 0, 12] = self_agent_state[:, 0, 3]
-
-        
+        # print("robot state:",self_agent_state.shape)
+        # print("emb state:",state.shape)
         if self.multi_process_type == "self_attention":
             state = torch.cat([self_agent_state, state], dim=1)
         
@@ -681,6 +746,7 @@ class ValueNetworkTransformerAndGRU(nn.Module):
             env_info = env_info.view(env_info.shape[0], env_info.shape[2])
             pass
         
+        # print(env_info.size())
         joint_state = torch.cat([self_state, env_info], dim=1)
         value = self.action_mlp(joint_state)
         value = value.view(size[0], -1)

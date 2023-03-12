@@ -307,7 +307,7 @@ class MultiHumanRL(CADRL):
     def get_act_statistic_info(self):
         return self.statistic_info
 
-    def predict(self, state):
+    def predict(self, state, lidar_image=None):
         """
         A base class for all methods that takes pairwise joint state as input to value network.
         The input to the value network is always of shape (batch_size, # humans, rotated joint state length)
@@ -336,31 +336,47 @@ class MultiHumanRL(CADRL):
             for action in self.action_space:
                 next_self_state = self.propagate(state.self_state, action)
 
-                if self.query_env:
-                    next_human_states, reward, done, info = self.env.onestep_lookahead(action, need_build_map)
-                    need_build_map = False
-                else:
-                    next_human_states = [
-                        self.propagate(human_state, ActionXY(human_state.vx, human_state.vy))
-                        for human_state in state.human_states
-                    ]
-                    self.map.build_map_cpu(next_human_states)
-                    collision_probability = self.map.compute_occupied_probability(next_self_state)
-                    reward = self.compute_reward(next_self_state, next_human_states, collision_probability)
+                if lidar_image is None:
 
-                batch_next_states = torch.cat([
-                    torch.Tensor([next_self_state + next_human_state]).to(self.device)
-                    for next_human_state in next_human_states
-                ],
-                                              dim=0)
-                rotated_batch_input = self.rotate(batch_next_states).unsqueeze(0)
-                if self.with_om:
-                    if occupancy_maps is None:
-                        occupancy_maps = self.build_occupancy_maps(next_human_states).unsqueeze(0)
-                    rotated_batch_input = torch.cat([rotated_batch_input, occupancy_maps], dim=2)
+
+                    if self.query_env:
+                        # print("querying env")
+                        next_human_states, lidar_image, reward, done, info = self.env.onestep_lookahead(action, need_build_map)
+                        # print("img:",lidar_image.size())
+                        need_build_map = False
+                    else:
+                        next_human_states = [
+                            self.propagate(human_state, ActionXY(human_state.vx, human_state.vy))
+                            for human_state in state.human_states
+                        ]
+                        self.map.build_map_cpu(next_human_states)
+                        collision_probability = self.map.compute_occupied_probability(next_self_state)
+                        reward = self.compute_reward(next_self_state, next_human_states, collision_probability)
+
+                    batch_next_states = torch.cat([
+                        torch.Tensor([next_self_state + next_human_state]).to(self.device)
+                        for next_human_state in next_human_states
+                    ],
+                                                dim=0)
+                    rotated_batch_input = self.rotate(batch_next_states).unsqueeze(0)
+                    if self.with_om:
+                        if occupancy_maps is None:
+                            occupancy_maps = self.build_occupancy_maps(next_human_states).unsqueeze(0)
+                        rotated_batch_input = torch.cat([rotated_batch_input, occupancy_maps], dim=2)
+
+                    value, score = self.model(rotated_batch_input, lidar_image)
+
+                else:
+                    # print("querying env")
+                    next_human_states, lidar_image, reward, done, info = self.env.onestep_lookahead(action, need_build_map)
+                    # print("img:",lidar_image.shape)
+                    need_build_map = False
+
+                    value, score = self.model(state.self_state, lidar_image)
+
                 # VALUE UPDATE
 
-                value, score = self.model(rotated_batch_input)
+                
                 next_state_value = value.data.item()
 
                 value = reward + pow(self.gamma, self.time_step * state.self_state.v_pref) * next_state_value

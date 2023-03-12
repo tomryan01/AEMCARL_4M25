@@ -115,7 +115,7 @@ def main():
     env_config.set("reward", "reward_increment", reward_increment)
     env_config.set("reward", "position_variance", position_variance)
     env_config.set("reward", "direction_variance", direction_variance)
-    env_config.set("robot", "sensor", "lidar")
+    env_config.set("robot", "sensor", "lidar_images")
     # env_config.set("humans", "policy", "linear")
     # env_config.set("robot", "visible", agent_visible)
 
@@ -148,12 +148,17 @@ def main():
     policy.set_env(env)
     robot.print_info()
     if args.visualize:
-        ob = env.reset(args.phase, args.test_case)
+        ob, lidar_img = env.reset(args.phase, args.test_case)
         done = False
         last_pos = np.array(robot.get_position())
+        i = 0
         while not done:
-            action = robot.act(ob)
-            ob, _, done, info = env.step(action)
+            # print("ep",i)
+            # print(type(lidar_img))
+            # print("img:",lidar_img.shape)
+            
+            action = robot.act(ob, lidar_img)
+            ob, lidar_img, _, done, info = env.step(action)
             current_pos = np.array(robot.get_position())
             logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)
             last_pos = current_pos
@@ -170,7 +175,7 @@ def main():
         logging.info("run k episodes")
 
         # explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
-        explorer.run_k_episodes(50, args.phase, print_failure=True)
+        explorer.run_k_episodes(50, args.phase, print_failure=True, lidar_images=True)
 
 
 if __name__ == '__main__':

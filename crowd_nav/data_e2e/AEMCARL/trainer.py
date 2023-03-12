@@ -84,6 +84,3 @@ class Trainer(object):
         logging.debug('Average loss : %.2E', average_loss)
 
         return average_loss
-
-    def backpropagate_CNN(self): ## maybe??
-        pass

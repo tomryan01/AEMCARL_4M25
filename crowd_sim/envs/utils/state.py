@@ -48,3 +48,10 @@ class JointState(object):
 
         self.self_state = self_state
         self.human_states = human_states
+
+class JointStateLidar(object):
+    def __init__(self, self_state, lidar_image):
+        assert isinstance(self_state, FullState)
+
+        self.self_state = self_state
+        self.lidar_image = lidar_image
