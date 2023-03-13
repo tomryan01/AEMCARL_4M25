@@ -94,7 +94,7 @@ class Explorer(object):
             if update_memory:
                 if isinstance(info, ReachGoal) or isinstance(info, Collision):
                     # only add positive(success) or negative(collision) experience in experience set
-                    self.update_memory(states, actions, rewards, imitation_learning)
+                    self.update_memory(states, actions, rewards, lidar_img, imitation_learning)
 
             cumulative_rewards.append(
                 sum([
@@ -128,7 +128,7 @@ class Explorer(object):
             logging.info('Timeout cases: ' + ' '.join([str(x) for x in timeout_cases]))
         return lidar_img, self.robot
 
-    def update_memory(self, states, actions, rewards, imitation_learning=False):
+    def update_memory(self, states, actions, rewards, lidar_img, imitation_learning=False):
         if self.memory is None or self.gamma is None:
             raise ValueError('Memory or gamma value is not set!')
 
@@ -152,7 +152,7 @@ class Explorer(object):
                 else:
                     next_state = states[i + 1]
                     gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
-                    action_value, _ = self.target_model(next_state.unsqueeze(0))
+                    action_value, _ = self.target_model(next_state.unsqueeze(0), lidar_img)
                     value = reward + gamma_bar * action_value.data.item()
             value = torch.Tensor([value]).to(self.device)
 
