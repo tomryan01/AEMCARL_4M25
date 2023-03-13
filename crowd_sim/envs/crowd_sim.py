@@ -859,7 +859,7 @@ class CrowdSim(gym.Env):
                 stationary_state = True
 
         if self.global_time >= self.time_limit - 1:
-            reward = 0
+            reward = -2 * self.reward_increment
             done = True
             info = Timeout()
         elif collision:

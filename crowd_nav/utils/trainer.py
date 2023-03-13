@@ -43,7 +43,7 @@ class Trainer(object):
             self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True, drop_last=True)
         average_epoch_loss = 0
         for epoch in range(num_epochs):  #
-            print("OPTIMIZE_EPOCH")
+            # print("OPTIMIZE_EPOCH")
             epoch_loss = 0
             n = 0
             for data in self.data_loader:
@@ -62,8 +62,8 @@ class Trainer(object):
                 n += 1
                 inputs = Variable(inputs)
                 values = Variable(values)
-                print("inputs:",inputs.size())
-                print("values:",inputs.size())
+                # print("inputs:",inputs.size())
+                # print("values:",inputs.size())
 
                 self.optimizer.zero_grad()  #Clears the gradients of all optimized torch.Tensors.
                 # print("ERROR HERE")

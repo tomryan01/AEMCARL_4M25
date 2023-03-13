@@ -196,8 +196,8 @@ def main():
 
         print("il_policy: ", type(il_policy))
         robot.set_policy(il_policy)
-        lidar_image, state = explorer.run_k_episodes(10, "train", update_memory=True, imitation_learning=True) #200
-        # print(lidar_image, state)
+        lidar_image, state = explorer.run_k_episodes(200, "train", update_memory=True, imitation_learning=True) #200
+        print(lidar_image, state)
         trainer.optimize_epoch(il_epochs, lidar_image, state)
 
         torch.save(model.state_dict(), il_weight_file)
@@ -205,7 +205,7 @@ def main():
         logging.info("Experience set size: %d/%d", len(memory), memory.capacity)
 
     explorer.update_target_model(model)
-
+    
     # reinforcement learning
     policy.set_env(env)
     robot.set_policy(policy)
@@ -217,6 +217,8 @@ def main():
         explorer.run_k_episodes(100, "train", update_memory=True, episode=0)
         logging.info("Experience set size: %d/%d", len(memory), memory.capacity)
     episode = 0
+    lidar_image = None
+    
     while episode < train_episodes:
         if args.resume:
             epsilon = epsilon_end
@@ -232,10 +234,11 @@ def main():
             explorer.run_k_episodes(int(env.case_size["val"]/2), "val", episode=episode, lidar_images=True)
 
         # sample k episodes into memory and optimize over the generated memory
-        explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode) # sample_episodes
-        trainer.optimize_batch(train_batches)
+        lidar_image, state = explorer.run_k_episodes(1, "train", update_memory=True, episode=episode) # sample_episodes
+        # trainer.optimize_batch(train_batches)
+        trainer.optimize_epoch(1, lidar_image, state)
         episode += 1
-
+        
         # if robot.sensor == 'lidar_images':
         #     trainer.backpropagate_CNN()
 
