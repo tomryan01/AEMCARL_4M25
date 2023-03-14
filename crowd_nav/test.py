@@ -9,6 +9,7 @@ from crowd_nav.utils.explorer import Explorer
 from crowd_nav.policy.policy_factory import policy_factory
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.policy.orca import ORCA
+from crowd_nav.utils.explorer_test import ExplorerTest
 
 
 def main():
@@ -24,6 +25,7 @@ def main():
     parser.add_argument('--test_case', type=int, default=None)
     parser.add_argument('--square', default=False, action='store_true')
     parser.add_argument('--circle', default=False, action='store_true')
+    parser.add_argument('--evaluate', default=True, action='store_true')
 
     parser.add_argument('--video_file', type=str, default=None)
     parser.add_argument('--traj', default=False, action='store_true')
@@ -177,6 +179,10 @@ def main():
         # explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
         explorer.run_k_episodes(50, args.phase, print_failure=True, lidar_images=True)
 
+    if args.evaluate:
+        # explorer = Explorer(env, robot, device, policy.gamma, target_policy=policy)
+        explorer = ExplorerTest(env, robot, device, gamma=0.9)
+        explorer.run_k_episodes(200, "test") #num_test_cases
 
 if __name__ == '__main__':
     main()
