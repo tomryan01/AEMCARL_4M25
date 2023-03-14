@@ -40,7 +40,10 @@ class Trainer(object):
         if self.optimizer is None:
             raise ValueError('Learning rate is not set!')
         if self.data_loader is None:
-            self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True, drop_last=True)
+            try:
+                self.data_loader = DataLoader(self.memory, self.batch_size, shuffle=True, drop_last=True)
+            except:
+                return 0
         average_epoch_loss = 0
         for epoch in range(num_epochs):  #
             # print("OPTIMIZE_EPOCH")
@@ -55,6 +58,7 @@ class Trainer(object):
                 #     self.optimizer.zero_grad()
                 #     outputs, _ = self.model(inputs)
                 #     loss = self.criterion(outputs, values)
+                # print(self.data_loader)
                 try:
                     inputs, values = next(iter(self.data_loader))
                 except StopIteration:

@@ -687,41 +687,64 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         # self_agent_state[:, 0, 11] = 0.0
         # self_agent_state[:, 0, 12] = self_agent_state[:, 0, 3]
 
-        self_agent_state = torch.zeros(13, device=self.device)
-        self_agent_state[0] = 0
-        self_agent_state[1] = state.v_pref
-        self_agent_state[2] = state.theta
-        self_agent_state[3] = state.radius
-        self_agent_state[4] = state.vx
-        self_agent_state[5] = state.vy
-        self_agent_state[6] = state.px
-        self_agent_state[7] = state.py
-        self_agent_state[8] = 0
-        self_agent_state[9] = 0
-        self_agent_state[10] = state.radius
-        self_agent_state[11] = 0
-        self_agent_state[12] = 0
-        self_agent_state = self_agent_state.resize_(1,1,13)
 
-        # 1, 6
-        self_state = torch.zeros(6, device=self.device)
-        self_state[0] = state.theta
-        self_state[1] = state.radius
-        self_state[2] = state.vx
-        self_state[3] = state.vy
-        self_state[4] = state.px
-        self_state[5] = state.py
-        self_state = self_state.unsqueeze(0)
+        if torch.is_tensor(state):
+            self_agent_state = torch.mean(state, 1)
+            # size = self_agent_state.shape 
+            # print(self_agent_state)
+            self_state = self_agent_state[2:8]
+            # print(self_state)
+            self_agent_state = self_agent_state.resize_(1,1,13)
+            
+            # print("dim 1:",self_agent_state[0].size())
+            rem = 6 - len(self_state)
+            while rem > 0:
+                self_state = torch.cat((self_state, self_state[0].unsqueeze(0)), 0)
+                rem -= 1
+            # print("self_agent_state",self_agent_state.size())
+            # print("self_state",self_state.size())
+            
+        else:
+            # if state type FullState
+            self_agent_state = torch.zeros(13, device=self.device)
+            self_agent_state[0] = 0
+            self_agent_state[1] = state.v_pref
+            self_agent_state[2] = state.theta
+            self_agent_state[3] = state.radius
+            self_agent_state[4] = state.vx
+            self_agent_state[5] = state.vy
+            self_agent_state[6] = state.px
+            self_agent_state[7] = state.py
+            self_agent_state[8] = 0
+            self_agent_state[9] = 0
+            self_agent_state[10] = state.radius
+            self_agent_state[11] = 0
+            self_agent_state[12] = 0
+            self_agent_state = self_agent_state.resize_(1,1,13)
+
+            # 1, 6
+            self_state = torch.zeros(6, device=self.device)
+            self_state[0] = state.theta
+            self_state[1] = state.radius
+            self_state[2] = state.vx
+            self_state[3] = state.vy
+            self_state[4] = state.px
+            self_state[5] = state.py
+            self_state = self_state.unsqueeze(0)
+
+            # else tensor
+            
 
 
-        # print("sizes")
-        # print(self_agent_state.size())
-        # print(self_state.size())
+            # print("sizes")
+            # print(self_agent_state.size())
+            # print(self_state.size())
 
-        # print("self_agent_state STATE:",self_agent_state.size())
+            # print("self_agent_state STATE:",self_agent_state.size())
 
         state = lidar_embedding.clone().detach()
-        size = state.shape
+        size = state.shape 
+             # 1, 13?
 
         # print("robot state:",self_agent_state.shape)
         # print("emb state:",state.shape)
@@ -747,7 +770,14 @@ class ValueNetworkTransformerAndGRU(nn.Module):
             env_info = env_info.view(env_info.shape[0], env_info.shape[2])
             pass
         
+
+
+        if len(self_state.size()) < 2:
+            self_state = self_state.unsqueeze(0)
+
         # print(env_info.size())
+        # print(self_state.size())
+
         joint_state = torch.cat([self_state, env_info], dim=1)
         value = self.action_mlp(joint_state)
         value = value.view(size[0], -1)

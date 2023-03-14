@@ -62,6 +62,7 @@ class Explorer(object):
                     # last_pos = current_pos
 
                     states.append(self.robot.policy.last_state)
+                    # print("LAST STATE:",states[-1].size())
                     actions.append(action)
                     rewards.append(reward)
                 else:
@@ -92,7 +93,7 @@ class Explorer(object):
 
             # updatememory中传入的相当于是轨迹，在updatememory中计算state的value，然后存入 memory buffer 中
             if update_memory:
-                if isinstance(info, ReachGoal) or isinstance(info, Collision):
+                if isinstance(info, ReachGoal) or isinstance(info, Collision) or isinstance(info, Timeout):
                     # only add positive(success) or negative(collision) experience in experience set
                     self.update_memory(states, actions, rewards, lidar_img, imitation_learning)
 
@@ -152,7 +153,7 @@ class Explorer(object):
                 else:
                     next_state = states[i + 1]
                     gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
-                    action_value, _ = self.target_model(next_state.unsqueeze(0), lidar_img)
+                    action_value, _ = self.target_model(next_state, lidar_img)
                     value = reward + gamma_bar * action_value.data.item()
             value = torch.Tensor([value]).to(self.device)
 
