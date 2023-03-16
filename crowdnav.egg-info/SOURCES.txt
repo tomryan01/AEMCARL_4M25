@@ -18,8 +18,10 @@ crowd_nav/policy/policy_factory.py
 crowd_nav/policy/sarl.py
 crowd_nav/utils/__init__.py
 crowd_nav/utils/explorer.py
+crowd_nav/utils/explorer_test.py
 crowd_nav/utils/memory.py
 crowd_nav/utils/plot.py
+crowd_nav/utils/plot_test.py
 crowd_nav/utils/trainer.py
 crowd_nav/utils/utils.py
 crowd_sim/__init__.py
