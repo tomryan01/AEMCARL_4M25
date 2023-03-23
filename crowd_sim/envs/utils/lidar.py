@@ -18,12 +18,12 @@ def scan_lidar(robot, humans, res):
     return out_scan
 
 
-def scan_to_points(scan, robot):
+def scan_to_points(scan, robot, res):
     coords = []
     for i in range(len(scan)):
         if scan[i] != np.inf:
             coords.append(
-                [robot.px + scan[i] * np.cos(np.deg2rad(i)), robot.py + scan[i] * np.sin(np.deg2rad(i))])
+                [robot.px + scan[i] * np.cos(np.deg2rad(360*i/res)), robot.py + scan[i] * np.sin(np.deg2rad(360*i/res))])
 
     return coords
 
@@ -40,7 +40,7 @@ def shift_scan(robot, prev_angle, scan, time_step):
     return shifted
 
 
-def construct_img (self, scans):
+def construct_img (scans):
 
     # Normalize
     d_min = np.min(scans)
