@@ -567,7 +567,6 @@ class CrowdSim(gym.Env):
             agent.policy.time_step = self.time_step
 
         self.states = list()
-        self.scans = list()
         if hasattr(self.robot.policy, 'action_values'):
             self.action_values = list()
         if hasattr(self.robot.policy, 'get_attention_weights'):
@@ -576,6 +575,9 @@ class CrowdSim(gym.Env):
         # get current observation
         if self.robot.sensor == 'coordinates':
             ob = [human.get_observable_state() for human in self.humans]
+        elif self.robot.sensor == 'lidar':
+            self.scans = list()
+            # todo: get observable state from lidar (or equivalent)
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
@@ -688,8 +690,6 @@ class CrowdSim(gym.Env):
             if hasattr(self.robot.policy, 'get_attention_weights'):
                 self.attention_weights.append(self.robot.policy.get_attention_weights())
 
-            self.scans.append(self.scan_to_points(self.scan_lidar()))
-
             # update all agents
             self.robot.step(action)
             for i, human_action in enumerate(human_actions):
@@ -706,6 +706,7 @@ class CrowdSim(gym.Env):
             elif self.robot.sensor == 'lidar':
                 # todo: take human angles and put into some sort of observation - what does that mean for our case?
                 human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+                self.scans.append(self.scan_to_points(self.scan_lidar()))
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
         else:
@@ -795,11 +796,6 @@ class CrowdSim(gym.Env):
                     ax.add_artist(nav_direction)
                     for human_direction in human_directions:
                         ax.add_artist(human_direction)
-                
-                # scan_points = self.scans[k]
-                # xs = [scan_points[i][0] for i in range(len(scan_points))]
-                # ys = [scan_points[i][1] for i in range(len(scan_points))]
-                # ax.scatter(xs, ys, s=10)
             plt.legend([robot], ['Robot'], fontsize=16)
             plt.show()
         elif mode == 'video':
@@ -875,23 +871,26 @@ class CrowdSim(gym.Env):
             for arrow in arrows:
                 ax.add_artist(arrow)
 
-            scan_points = self.scans[0]
-            xs = [scan_points[i][0] for i in range(len(scan_points))]
-            ys = [scan_points[i][1] for i in range(len(scan_points))]
-            global scatter 
-            scatter = ax.scatter(xs, ys, c='b', s=5)
+            if self.robot.sensor == 'lidar':
+                scan_points = self.scans[0]
+                xs = [scan_points[i][0] for i in range(len(scan_points))]
+                ys = [scan_points[i][1] for i in range(len(scan_points))]
+                global scatter
+                scatter = ax.scatter(xs, ys, c='b', s=5)
             global_step = 0
+
             def update(frame_num):
                 nonlocal global_step
                 nonlocal arrows
                 global_step = frame_num
                 robot.center = robot_positions[frame_num]
-                scan_points = self.scans[frame_num]
-                xs = [scan_points[i][0] for i in range(len(scan_points))]
-                ys = [scan_points[i][1] for i in range(len(scan_points))]
-                global scatter
-                scatter.remove()
-                scatter = ax.scatter(xs, ys, c='b', s=5)
+                if self.robot.sensor == 'lidar':
+                    scan_points = self.scans[frame_num]
+                    xs = [scan_points[i][0] for i in range(len(scan_points))]
+                    ys = [scan_points[i][1] for i in range(len(scan_points))]
+                    global scatter
+                    scatter.remove()
+                    scatter = ax.scatter(xs, ys, c='b', s=5)
                 for i, human in enumerate(humans):
                     human.center = human_positions[frame_num][i]
                     human_numbers[i].set_position((human.center[0] - x_offset, human.center[1] - y_offset))
