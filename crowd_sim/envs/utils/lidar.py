@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def scan_lidar(self):
@@ -26,3 +27,30 @@ def scan_to_points(self, scan):
                 [self.robot.px + scan[i] * np.cos(np.deg2rad(i)), self.robot.py + scan[i] * np.sin(np.deg2rad(i))])
 
     return coords
+
+
+def shift_scan (self, scan, time_step):
+
+    delta_x = self.robot.vx * time_step
+    delta_y = self.robot.vy * time_step
+    heading_angle = np.atan2(delta_y, delta_x)
+
+    rotation = heading_angle - self.previous_angle
+    self.previous_angle = heading_angle
+    shifted = scan + rotation/(2*np.pi)
+
+    return shifted
+
+
+def construct_img (self, scans):
+
+    # Normalize
+    d_min = np.min(scans)
+    d_max = np.max(scans)
+    intensities = ((scans - d_min) * 255 / (d_max - d_min)).astype(np.uint8)
+
+    # Create the image
+    cmap = plt.cm.viridis
+    depth_image = cmap(intensities)
+
+    return depth_image
