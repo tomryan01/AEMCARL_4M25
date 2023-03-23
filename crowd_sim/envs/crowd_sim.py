@@ -9,6 +9,7 @@ from matplotlib import patches
 from numpy.linalg import norm
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import *
+from crowd_sim.envs.utils.lidar import *
 from crowd_sim.envs.utils.utils import point_to_segment_dist
 from crowd_sim.envs.utils.state import FullState
 from scipy.stats import norm as norm_pdf
@@ -486,31 +487,6 @@ class CrowdSim(gym.Env):
 
         del sim
         return self.human_times
-
-    def scan_lidar(self):
-        # get scan as a dictionary {angle_index : distance}
-        res = self.scan_points
-        full_scan = {}
-        for h in self.humans:
-            scan = h.get_scan(res, self.robot.px, self.robot.py)
-            for angle in scan:
-                if scan[angle] < full_scan.get(angle, np.inf):
-                    full_scan[angle] = scan[angle]
-
-        # convert to array of length res, with inf at angles with no reading
-        out_scan = np.zeros(res) + np.inf
-        for k in full_scan.keys():
-            out_scan[k] = full_scan[k]
-        return out_scan
-    
-    def scan_to_points(self, scan):
-        coords = []
-        for i in range(len(scan)):
-            if scan[i] != np.inf:
-                coords.append([self.robot.px + scan[i]*np.cos(np.deg2rad(i)), self.robot.py + scan[i]*np.sin(np.deg2rad(i))])
-
-        return coords
-
 
     def reset(self, phase='test', test_case=None):
         """
