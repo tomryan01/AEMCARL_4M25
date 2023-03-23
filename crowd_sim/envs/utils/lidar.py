@@ -15,6 +15,7 @@ def scan_lidar(robot, humans, res):
     out_scan = np.zeros(res) + np.inf
     for k in full_scan.keys():
         out_scan[k] = full_scan[k]
+    out_scan = np.roll(out_scan, -1*int(np.round(np.rad2deg(robot.theta))))
     return out_scan
 
 
@@ -26,18 +27,6 @@ def scan_to_points(scan, robot, res):
                 [robot.px + scan[i] * np.cos(np.deg2rad(360*i/res)), robot.py + scan[i] * np.sin(np.deg2rad(360*i/res))])
 
     return coords
-
-
-def shift_scan(robot, prev_angle, scan, time_step):
-
-    delta_x = robot.vx * time_step
-    delta_y = robot.vy * time_step
-    heading_angle = np.atan2(delta_y, delta_x)
-
-    rotation = heading_angle - prev_angle
-    shifted = scan + rotation/(2*np.pi)
-
-    return shifted
 
 
 def construct_img (scans):
