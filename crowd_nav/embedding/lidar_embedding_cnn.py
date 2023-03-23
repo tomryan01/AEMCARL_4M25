@@ -42,8 +42,7 @@ class LidarEmbeddingCNN(nn.Module):
 
     def _get_conv_output_shape(self, shape):
         # Helper function to calculate the output shape of the convolutional layers
-        x = torch.rand(*shape)
-        print(x.size())
+        x = torch.rand(*shape).unsqueeze(0)
         x = self.conv1(x)
         x = self.relu1(x)
         x = self.bn1(x)
@@ -51,6 +50,7 @@ class LidarEmbeddingCNN(nn.Module):
         x = self.conv2(x)
         x = self.relu2(x)
         x = self.bn2(x)
+        x = self.maxpool2(x)
 
         return self.flatten(x).shape[1]
 
@@ -66,6 +66,6 @@ def run(image_np):
     model.eval()
 
     with torch.no_grad():
-        output = model(image_tensor)
+        output = model(image_tensor.unsqueeze(0))
 
     return output
