@@ -42,10 +42,17 @@ def shift_scan(robot, prev_angle, scan, time_step):
 
 def construct_img (scans):
 
+    # Remove any infs from scans
+    scans = np.array(scans)
+    scans = np.where(scans == np.inf, 5., scans) # todo: some more logic/ intuition on the max value here
+
     # Normalize
     d_min = np.min(scans)
     d_max = np.max(scans)
-    intensities = ((scans - d_min) * 255 / (d_max - d_min)).astype(np.uint8)
+    diff = d_max - d_min
+    if diff == 0:
+        diff = 1
+    intensities = ((scans - d_min) * 255 / diff).astype(np.uint8)
 
     # Create the image
     cmap = plt.cm.viridis
