@@ -13,7 +13,7 @@ class LidarPolicy(ACTENVCARL):
         super().__init__()
         self.name = "LidarPolicy"
         self.res = res
-        self.embedding_length = run(construct_img(torch.zeros(res).unsqueeze(0))).shape[-1]
+        self.embedding_length = run(construct_img(torch.zeros(res, 100))).shape[-1]
 
     def input_dim(self):
         return self.self_state_dim + self.embedding_length
@@ -65,7 +65,7 @@ class LidarPolicy(ACTENVCARL):
                     collision_probability = self.map.compute_occupied_probability(next_self_state)
                     reward = self.compute_reward(next_self_state, next_human_states, collision_probability)
 
-                embedding = run(construct_img(torch.tensor(state.lidar_state.readings).unsqueeze(0)))
+                embedding = run(construct_img(torch.tensor(state.lidar_state.readings)))
 
                 batch_states = torch.cat([
                     torch.Tensor(list(next_self_state)).to(self.device),

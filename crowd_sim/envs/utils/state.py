@@ -1,3 +1,5 @@
+import numpy as np
+
 class FullState(object):
     def __init__(self, px, py, vx, vy, radius, gx, gy, v_pref, theta):
         self.px = px
@@ -45,9 +47,9 @@ class ObservableState(object):
 
 class LidarState(object):
     def __init__(self, res, readings):
-        assert res == len(readings)
+        assert res == np.array(readings).shape[-1]
         self.res = res
-        self.readings = readings
+        self.readings = np.array(readings)
 
     def __add__(self, other):
         return other + self.readings

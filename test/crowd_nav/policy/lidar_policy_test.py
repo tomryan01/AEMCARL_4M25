@@ -29,7 +29,7 @@ class LidarPolicyTest(unittest.TestCase):
         configure(policy)
 
         embedding_output_length = policy.embedding_length
-        self.assertEqual(run(construct_img(torch.zeros(res).unsqueeze(0))).shape[-1], embedding_output_length)
+        self.assertEqual(run(construct_img(torch.zeros(res, 100))).shape[-1], embedding_output_length)
 
         self.assertEqual(policy.model.input_dim, policy.self_state_dim + embedding_output_length)
 
@@ -54,9 +54,12 @@ class LidarPolicyTest(unittest.TestCase):
         policy.time_step = dt
         robot.set_policy(policy)
         env.reset('train')
+        scans = []
+        for i in range(100):
+            scans.append(scan_lidar(robot, [], res))
         state = JointStateLidar(
             robot.get_full_state(),
-            LidarState(res, scan_lidar(robot, [], res))
+            LidarState(res, scans)
         )
         policy.predict(state)
         self.assertEqual(True, True)
