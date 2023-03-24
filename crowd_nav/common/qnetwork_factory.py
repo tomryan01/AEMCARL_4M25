@@ -1,6 +1,4 @@
 from re import I
-from utils.explorer import average
-from common.naive_transformer import TransformerEncoder
 import numpy as np
 import logging
 import torch
