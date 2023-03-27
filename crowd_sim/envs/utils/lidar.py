@@ -2,12 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def scan_lidar(self):
+def scan_lidar(robot, humans, res):
     # get scan as a dictionary {angle_index : distance}
-    res = self.scan_points
     full_scan = {}
-    for h in self.humans:
-        scan = h.get_scan(res, self.robot.px, self.robot.py)
+    for h in humans:
+        scan = h.get_scan(res, robot.px, robot.py)
         for angle in scan:
             if scan[angle] < full_scan.get(angle, np.inf):
                 full_scan[angle] = scan[angle]
@@ -16,38 +15,33 @@ def scan_lidar(self):
     out_scan = np.zeros(res) + np.inf
     for k in full_scan.keys():
         out_scan[k] = full_scan[k]
+    out_scan = np.roll(out_scan, -1*int(np.round(np.rad2deg(robot.theta))))
     return out_scan
 
 
-def scan_to_points(self, scan):
+def scan_to_points(scan, robot, res):
     coords = []
     for i in range(len(scan)):
         if scan[i] != np.inf:
             coords.append(
-                [self.robot.px + scan[i] * np.cos(np.deg2rad(i)), self.robot.py + scan[i] * np.sin(np.deg2rad(i))])
+                [robot.px + scan[i] * np.cos(np.deg2rad(360*i/res)), robot.py + scan[i] * np.sin(np.deg2rad(360*i/res))])
 
     return coords
 
 
-def shift_scan (self, scan, time_step):
+def construct_img (scans):
 
-    delta_x = self.robot.vx * time_step
-    delta_y = self.robot.vy * time_step
-    heading_angle = np.atan2(delta_y, delta_x)
-
-    rotation = heading_angle - self.previous_angle
-    self.previous_angle = heading_angle
-    shifted = scan + rotation/(2*np.pi)
-
-    return shifted
-
-
-def construct_img (self, scans):
+    # Remove any infs from scans
+    scans = np.array(scans)
+    scans = np.where(scans == np.inf, 5., scans) # todo: some more logic/ intuition on the max value here
 
     # Normalize
     d_min = np.min(scans)
     d_max = np.max(scans)
-    intensities = ((scans - d_min) * 255 / (d_max - d_min)).astype(np.uint8)
+    diff = d_max - d_min
+    if diff == 0:
+        diff = 1
+    intensities = ((scans - d_min) * 255 / diff).astype(np.uint8)
 
     # Create the image
     cmap = plt.cm.viridis
