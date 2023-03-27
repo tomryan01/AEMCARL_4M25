@@ -1,3 +1,5 @@
+import numpy as np
+
 class FullState(object):
     def __init__(self, px, py, vx, vy, radius, gx, gy, v_pref, theta):
         self.px = px
@@ -13,6 +15,9 @@ class FullState(object):
         self.position = (self.px, self.py)
         self.goal_position = (self.gx, self.gy)
         self.velocity = (self.vx, self.vy)
+
+    def __iter__(self):
+        return iter([self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy, self.v_pref, self.theta])
 
     def __add__(self, other):
         return other + (self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy, self.v_pref, self.theta)
@@ -40,6 +45,19 @@ class ObservableState(object):
         return ' '.join([str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius]])
 
 
+class LidarState(object):
+    def __init__(self, res, readings):
+        assert res == np.array(readings).shape[-1]
+        self.res = res
+        self.readings = np.array(readings)
+
+    def __add__(self, other):
+        return other + self.readings
+
+    def __str__(self, other):
+        return "Lidar readings with resolution {}".format(self.res)
+
+
 class JointState(object):
     def __init__(self, self_state, human_states):
         assert isinstance(self_state, FullState)
@@ -48,3 +66,12 @@ class JointState(object):
 
         self.self_state = self_state
         self.human_states = human_states
+
+
+class JointStateLidar(object):
+    def __init__(self, self_state, lidar_state):
+        assert isinstance(self_state, FullState)
+        assert isinstance(lidar_state, LidarState)
+
+        self.self_state = self_state
+        self.lidar_state = lidar_state
