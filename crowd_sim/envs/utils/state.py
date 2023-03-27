@@ -25,6 +25,9 @@ class FullState(object):
     def __str__(self):
         return ' '.join([str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy,
                                           self.v_pref, self.theta]])
+    
+    def get_state(self):
+        return (self.px, self.py, self.vx, self.vy, self.radius, self.gx, self.gy, self.v_pref, self.theta)
 
 
 class ObservableState(object):
@@ -69,9 +72,12 @@ class JointState(object):
 
 
 class JointStateLidar(object):
-    def __init__(self, self_state, lidar_state):
+    def __init__(self, self_state, lidar_state, human_states):
         assert isinstance(self_state, FullState)
-        assert isinstance(lidar_state, LidarState)
+        # assert isinstance(lidar_state, LidarState)
+        for human_state in human_states:
+            assert isinstance(human_state, ObservableState)
 
         self.self_state = self_state
         self.lidar_state = lidar_state
+        self.human_states = human_states

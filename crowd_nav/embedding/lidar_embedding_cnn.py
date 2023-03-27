@@ -8,12 +8,12 @@ class LidarEmbeddingCNN(nn.Module):
         super(LidarEmbeddingCNN, self).__init__()
         self.input_shape = input_shape
 
-        self.conv1 = nn.Conv2d(4, 32, kernel_size=3, stride=2, padding=1)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=(1,2), padding=1)
         self.relu1 = nn.LeakyReLU(inplace=True)
         self.bn1 = nn.BatchNorm2d(32)
         self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=(1,2), padding=1)
         self.relu2 = nn.LeakyReLU(inplace=True)
         self.bn2 = nn.BatchNorm2d(64)
         self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -69,3 +69,5 @@ def run(image_np):
         output = model(image_tensor.unsqueeze(0))
 
     return output
+
+

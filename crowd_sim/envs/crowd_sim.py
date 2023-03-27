@@ -17,6 +17,7 @@ from numba import jit, cuda
 import math
 import cv2
 from math import atan2, pi
+import torch
 
 table_size = 10000
 table_offset = 5000
@@ -254,8 +255,10 @@ class CrowdSim(gym.Env):
         self.circle_radius = None
         self.human_num = None
         self.lidar_fov = 360
-        self.scan_points = 360
+        self.scan_points = 450
         self.lidar_resolution = np.deg2rad(self.lidar_fov/self.scan_points)
+        self.previous_angle = 0.0
+        self.lidar_image = None
         # for visualization
         self.states = None
         self.scans = None
@@ -488,6 +491,99 @@ class CrowdSim(gym.Env):
         del sim
         return self.human_times
 
+    def scan_lidar(self, human_states, robot_state, noise = 0.3):
+        # get scan as a dictionary {angle_index : distance}
+        res = self.scan_points
+        full_scan = {}
+        for h in human_states:
+            scan = self.get_scan(res, h.px, h.py,h.radius, robot_state.px, robot_state.py)
+            for angle in scan:
+                if scan[angle] < full_scan.get(angle, np.inf):
+                    full_scan[angle] = scan[angle]
+
+        # convert to array of length res, with inf at angles with no reading
+        out_scan = np.zeros(res) + np.inf
+        for k in full_scan.keys():
+            out_scan[k] = full_scan[k]
+
+        out_scan = out_scan + noise*np.random.random(len(out_scan)) - 0.2
+        dim = 6
+        x = self.robot.px
+        y = self.robot.py
+        theta1 = np.arctan((dim-y)/(dim-x))
+        theta2 = np.pi - np.arctan((dim-y)/(dim+x))
+        theta3 = 1.5*np.pi - np.arctan((dim+x)/(dim+y))
+        theta4 = 1.5*np.pi + np.arctan((dim-x)/(dim+y))
+
+        for i in range(res):
+            if out_scan[i] == np.inf:
+                ang = np.deg2rad(360*i/res)
+                if  0 <= ang < theta1 or theta4 <= ang < 2*np.pi:
+                    out_scan[i] = (dim-x)/np.cos(ang)
+                elif theta1 <= ang < theta2:
+                    out_scan[i] = (dim-y)/np.sin(ang)
+                elif theta2 <= ang < theta3:
+                    out_scan[i] = -(dim+x)/np.cos(ang)
+                else:
+                    out_scan[i] = -(dim+y)/np.sin(ang)
+                
+            
+        return out_scan
+
+    def get_scan(self, resolution,human_px,human_py,human_radius, robot_px, robot_py):
+        # get vector between other and this
+        r = np.array([human_px - robot_px, human_py - robot_py])
+        # compute angle of vector
+        theta = np.arctan2(r[1], r[0])
+        # compute angles to each edge of agent from robot
+        c_dtheta = human_radius / np.linalg.norm(r)
+        c_dtheta = np.clip(c_dtheta, -1, 1)
+        dtheta = np.arcsin(c_dtheta)
+        max_theta = theta + dtheta
+        min_theta = theta - dtheta
+        # compute angles in range matching resolution constraint
+
+        angle_indexes = np.array(range(int(np.ceil(min_theta*resolution/(2*np.pi))), int(np.ceil(max_theta*resolution/(2*np.pi)))))
+        angles = angle_indexes * 2 * np.pi / resolution
+        # compute distances at each angle
+        distances = np.linalg.norm(r) / np.cos(np.abs(theta - angles))
+        # correct angle indexes to the range (0, resolution - 1)
+        angle_indexes = np.where(angle_indexes < 0, angle_indexes + resolution, angle_indexes)
+        # return dictionary of {indexes : distances}
+        return dict(zip(angle_indexes.tolist(), distances.tolist()))
+
+    def scan_to_points(self, scan):
+        coords = []
+        for i in range(len(scan)):
+            ang = 360*i/self.scan_points
+            coords.append([self.robot.px + scan[i]*np.cos(np.deg2rad(ang)), self.robot.py + scan[i]*np.sin(np.deg2rad(ang))])
+
+        return coords
+    
+    def shift_scan(self, scan, robot_vx,robot_vy, time_step):
+
+        delta_x = robot_vx * time_step
+        delta_y = robot_vy * time_step
+        heading_angle = atan2(delta_y, delta_x)
+
+        rotation = heading_angle - self.previous_angle
+        self.previous_angle = heading_angle
+        shifted = scan + (rotation+np.pi)/(4*np.pi)
+
+        # print("ROT:", rotation)
+
+        return shifted
+        
+    def construct_img(self, scans):
+        assert len(scans) == 10
+        # Normalize 
+        d_max = np.max(scans)
+        scans = np.array(scans)
+        intensities = ((scans) * 255 / d_max).astype(np.uint8)
+
+        return intensities
+
+
     def reset(self, phase='test', test_case=None):
         """
         Set px, py, gx, gy, vx, vy, theta for robot and humans
@@ -543,21 +639,26 @@ class CrowdSim(gym.Env):
             agent.policy.time_step = self.time_step
 
         self.states = list()
+        self.scans = list()
+        self.lidar_scans = list()
+    
         if hasattr(self.robot.policy, 'action_values'):
             self.action_values = list()
         if hasattr(self.robot.policy, 'get_attention_weights'):
             self.attention_weights = list()
-
+        
+        lidar_image = None
         # get current observation
         if self.robot.sensor == 'coordinates':
             ob = [human.get_observable_state() for human in self.humans]
         elif self.robot.sensor == 'lidar':
             self.scans = list()
             # todo: get observable state from lidar (or equivalent)
-        elif self.robot.sensor == 'RGB':
-            raise NotImplementedError
+        elif self.robot.sensor == 'lidar_images':
+            ob = [human.get_observable_state() for human in self.humans]
+            lidar_image = torch.zeros(1,10,450)
 
-        return ob
+        return ob, lidar_image
 
     def onestep_lookahead(self, action, rebuild=True):
         return self.step(action, update=False, rebuild=rebuild)
@@ -666,6 +767,56 @@ class CrowdSim(gym.Env):
             if hasattr(self.robot.policy, 'get_attention_weights'):
                 self.attention_weights.append(self.robot.policy.get_attention_weights())
 
+            # get LiDAR scan
+            time_step = self.time_step
+            scan = self.scan_lidar([human.get_full_state() for human in self.humans],self.robot.get_full_state())
+
+            if(self.global_time == 0):
+                delta_x = self.robot.vx * time_step
+                delta_y = self.robot.vy * time_step
+                heading_angle = atan2(delta_y, delta_x)
+                self.previous_angle = heading_angle
+
+
+            lidar_image = None
+            # print("NUM LIDAR SCANS:",len(self.lidar_scans))
+            if(self.global_time != 0):
+                scan_app = self.shift_scan(scan,self.robot.vx,self.robot.vy, time_step)
+                self.lidar_scans.append(scan_app)
+                if len(self.lidar_scans) >= 10:
+                    latest_scans = self.lidar_scans[-10:]
+                    # print("scans shape:",len(latest_scans))
+                    lidar_image = self.construct_img(latest_scans)
+                    lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
+
+                    # plt.imshow(lidar_image)
+                    # plt.show()
+                    # lidar_embedding = run(lidar_image)
+                    # _, lidar_embedding = get_embedding(lidar_image, self.model_cnn)
+                    # print("lidar_embedding:",lidar_embedding)
+                    # print(lidar_embedding.shape)
+
+            
+            if(done):
+                scan_app = self.shift_scan(scan,self.robot.vx,self.robot.vy, time_step)
+                self.lidar_scans.append(scan_app)
+                if len(self.lidar_scans) >= 10:
+                    latest_scans = self.lidar_scans[-10:]
+                    lidar_image = self.construct_img(latest_scans)
+                    lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
+                else:
+                    lidar_image = torch.zeros(1,10,450)
+                # print("scans shape:",len(latest_scans))
+                
+            
+            if lidar_image is None:
+                lidar_image = torch.zeros(1,10,450)
+
+            self.lidar_image = lidar_image
+
+            self.scans.append(self.scan_to_points(scan))
+
+
             # update all agents
             self.robot.step(action)
             for i, human_action in enumerate(human_actions):
@@ -686,10 +837,25 @@ class CrowdSim(gym.Env):
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
         else:
+            lidar_image  = None
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_next_observable_state(action) for human, action in zip(self.humans, human_actions)]
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
+            elif self.robot.sensor == 'lidar_images':
+                ob = [human.get_next_observable_state(action) for human, action in zip(self.humans, human_actions)]
+                next_rob_state = self.robot.get_next_observable_state(action)
+                scan = self.scan_lidar(ob,next_rob_state)
+                scan_app = self.shift_scan(scan, next_rob_state.vx, next_rob_state.vy, self.time_step)
+                if len(self.lidar_scans) >= 9:
+                    latest_scans = self.lidar_scans[-9:]
+                    latest_scans.append(scan_app)
+                    lidar_image = self.construct_img(latest_scans)
+                    lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
+
+                if lidar_image is None:
+                    lidar_image = torch.zeros(1,10,450)
+
 
         # self.agent_prev_vx = action.vx
         # self.agent_prev_vy = action.vy
@@ -700,7 +866,8 @@ class CrowdSim(gym.Env):
             self.agent_prev_vx = action.v * np.cos(action.r + self.robot.theta)
             self.agent_prev_vy = action.v * np.sin(action.r + self.robot.theta)
 
-        return ob, reward, done, info
+
+        return ob, lidar_image, reward, done, info
 
     def render(self, mode='human', output_file=None):
         from matplotlib import animation

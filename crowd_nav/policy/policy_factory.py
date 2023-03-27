@@ -7,6 +7,7 @@ from crowd_nav.policy.gipcarl import GIPCARL
 from crowd_nav.policy.actcarl import ACTCARL
 from crowd_nav.policy.actenvcarl import ACTENVCARL
 from crowd_nav.policy.actfcarl import ACTFCARL
+from crowd_nav.policy.lidar_policy import LidarPolicy
 
 
 policy_factory['cadrl'] = CADRL
@@ -17,3 +18,4 @@ policy_factory['gipcarl'] = GIPCARL
 policy_factory['actcarl'] = ACTCARL
 policy_factory['actenvcarl'] = ACTENVCARL
 policy_factory['actfcarl'] = ACTFCARL
+policy_factory['lidar'] = LidarPolicy
