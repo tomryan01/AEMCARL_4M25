@@ -1,6 +1,4 @@
 from re import I
-from utils.explorer import average
-from common.naive_transformer import TransformerEncoder
 import numpy as np
 import logging
 import torch
@@ -9,6 +7,7 @@ from crowd_nav.common.components import ATC_TFencoder, mlp
 from crowd_nav.common.components import ATCBasic
 from crowd_nav.common.components import ATCBasicTfencoder
 from enum import IntEnum
+from crowd_nav.embedding.lidar_embedding_cnn import LidarEmbeddingCNN
 
 # from torch.nn import TransformerEncoder
 # from torch.nn import TransformerDecoder
@@ -23,6 +22,8 @@ class Flag(IntEnum):
     UseOnlyTf_2 = 6
     UseActTfencoder = 4
     UseOnlyTfAndGRU = 5
+    UseOnlyTfAndGRUAndLidar = 7
+
 
 
 class ValueNetworkBase(nn.Module):
@@ -39,8 +40,10 @@ class ValueNetworkBase(nn.Module):
                  test_policy_flag=0,
                  multi_process_type="average",
                  act_steps=3,
-                 act_fixed=False):
+                 act_fixed=False,
+                 lidar_input_dim = None):
         super().__init__()
+        self.lidar_input_dim = lidar_input_dim
         self.input_dim = input_dim
         self.self_state_dim = self_state_dim
         self.joint_state_dim = joint_state_dim
@@ -88,6 +91,7 @@ class ValueNetworkBase(nn.Module):
                                                   act_layer_type=2)
             pass
         elif self.test_policy_flag == Flag.UseOnlyTf:
+
             return ValueNetworkUseOnlyTransformer(self.input_dim,
                                                   self.self_state_dim,
                                                   self.joint_state_dim,
@@ -104,6 +108,11 @@ class ValueNetworkBase(nn.Module):
             pass
         elif self.test_policy_flag == Flag.UseOnlyTfAndGRU:
             return ValueNetworkTransformerAndGRU(self.input_dim, self.self_state_dim, self.joint_state_dim,
+                                                 self.in_mlp_dims, self.sort_mlp_dims, self.sort_mlp_attention,
+                                                 self.action_dims, self.with_dynamic_net, self.with_global_state,
+                                                 self.multi_process_type, self.act_steps, self.act_fixed)
+        elif self.test_policy_flag == Flag.UseOnlyTfAndGRUAndLidar:
+            return ValueNetworkTransformerAndGRULidar(self.lidar_input_dim,self.input_dim, self.self_state_dim, self.joint_state_dim,
                                                  self.in_mlp_dims, self.sort_mlp_dims, self.sort_mlp_attention,
                                                  self.action_dims, self.with_dynamic_net, self.with_global_state,
                                                  self.multi_process_type, self.act_steps, self.act_fixed)
@@ -645,10 +654,11 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         #   0   1       2       3       4   5   6   7     8    9    10      11      12
         # [dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum]
         size = state.shape
+        # print(size)
         self_state = state[:, 0, :self.self_state_dim].clone().detach()  # 500 x 6 (100 x 5 x 6)
 
         
-        self_agent_state = state[:, 0, :].clone().detach()
+        self_agent_state = state[:, 0, :].clone().detach() # agent
         self_agent_state = self_agent_state.view(self_agent_state.shape[0], -1, self_agent_state.shape[1])
         self_agent_state[:, 0, 6] = 0.0
         self_agent_state[:, 0, 7] = 0.0
@@ -660,18 +670,22 @@ class ValueNetworkTransformerAndGRU(nn.Module):
 
         
         if self.multi_process_type == "self_attention":
-            state = torch.cat([self_agent_state, state], dim=1)
+            state = torch.cat([self_agent_state, state], dim=1) #[batch size, num_humans + 1, 13]
         
         act_h0 = torch.zeros([size[0] * (size[1] + 1), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
+        # act_h0 = torch.zeros([size[0] * (size[1]), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
         in_mlp_output, self.step_cnt = self.in_mlp(state, act_h0)  # batch_sz*num_agents*in_mlp_dims[-1]
+        # print("inp_mlp", in_mlp_output.size())
         env_score = 0.5  
         
         # 100 * 5 * 100
 
-        tfencoder_input = in_mlp_output.view(size[0], -1, 50)
-        tfencoder_input = tfencoder_input.transpose(0, 1).contiguous()
-        tfencoder_output = self.transformer_encoder(tfencoder_input)
+        tfencoder_input = in_mlp_output.view(size[0], -1, 50) #[6 50] -> [6 1 50]
+        tfencoder_input = tfencoder_input.transpose(0, 1).contiguous() 
+        tfencoder_output = self.transformer_encoder(tfencoder_input) 
         tfencoder_output = tfencoder_output.transpose(0, 1).contiguous()
+
+        # print(tfencoder_output.size())
         
         if self.multi_process_type == "self_attention":
             env_info = tfencoder_output[:, 0, :]
@@ -680,8 +694,116 @@ class ValueNetworkTransformerAndGRU(nn.Module):
             env_info = torch.mean(tfencoder_output, dim=1, keepdim=True)
             env_info = env_info.view(env_info.shape[0], env_info.shape[2])
             pass
+
+        # print(self_state.size(), env_info.size())
         
         joint_state = torch.cat([self_state, env_info], dim=1)
         value = self.action_mlp(joint_state)
         value = value.view(size[0], -1)
+        return value, env_score
+    
+
+class ValueNetworkTransformerAndGRULidar(nn.Module):
+    def __init__(self,
+                 lidar_input_dim,
+                 input_dim,
+                 self_state_dim,
+                 joint_state_dim,
+                 in_mlp_dims,
+                 sort_mlp_dims,
+                 sort_mlp_attention,
+                 action_dims,
+                 with_dynamic_net=True,
+                 with_global_state=True,
+                 multi_process_type="average",
+                 act_steps=3,
+                 act_fixed=False):
+        super().__init__()
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.self_state_dim = self_state_dim
+        self.global_state_dim = in_mlp_dims[-1]
+        self.joint_state_dim = joint_state_dim
+        self.in_mlp_dims = in_mlp_dims
+        self.input_dim = input_dim
+        self.lstm_hidden_dim = sort_mlp_attention[0] * 2
+        self.with_dynamic_net = with_dynamic_net
+        self.with_global_state = with_global_state
+        self.sort_mlp_attention = sort_mlp_attention
+        self.sort_mlp_global_state_dim = sort_mlp_dims[-1]
+
+        self.act_fixed = act_fixed
+        self.act_steps = act_steps
+
+        self.multi_process_type = multi_process_type
+
+        if self.with_dynamic_net:
+            self.in_mlp = ATCBasic(self.input_dim,
+                                   in_mlp_dims,
+                                   epsilon=0.05,
+                                   last_relu=True,
+                                   act_steps=self.act_steps,
+                                   act_fixed=self.act_fixed)
+        else:
+            self.in_mlp = mlp(self.input_dim, in_mlp_dims, last_relu=True)
+
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=50, nhead=2, dim_feedforward=150)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=3)
+
+        action_input_dim = 50 + self.self_state_dim  # 50 + 6
+        self.action_mlp = mlp(action_input_dim, action_dims)  # 56,150,100,100,1
+        # self.transmlp = mlp(input_dim=250, mlp_dims=[250, 100])
+        self.attention_weights = None
+        self.step_cnt = 0
+        # print(lidar_input_dim)
+        self.lidarcnn = LidarEmbeddingCNN(lidar_input_dim)
+
+    def get_step_cnt(self):
+        return self.step_cnt
+        pass
+
+    def forward(self, self_state: torch.Tensor, lidar_images):
+        '''
+        batch_size * seq_len * feature_size self state [bx6] -> [bx1x65]
+        '''
+
+        img_embedding = self.lidarcnn(lidar_images) #[bxcxhxw] -> [bxe] -> [bx1,65]
+        batch_size, embed_len = img_embedding.size()
+
+        self_state_ex = torch.zeros(batch_size,1,embed_len).cuda()
+        self_state_ex[:,0, :self.self_state_dim] = self_state.clone()
+
+        img_embedding = img_embedding.view(batch_size, -1, embed_len)
+        
+        if self.multi_process_type == "self_attention":
+            state = torch.cat([img_embedding, self_state_ex], dim=1) #[batch size, num_humans + 1, 13] [b, 2, 65]
+        
+        act_h0 = torch.zeros([batch_size * (1 + 1), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
+        # act_h0 = torch.zeros([size[0] * (size[1]), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
+        in_mlp_output, self.step_cnt = self.in_mlp(state, act_h0)  # batch_sz*num_agents*in_mlp_dims[-1]
+        # print("inp_mlp", in_mlp_output.size())
+        env_score = 0.5  
+        
+        # 100 * 5 * 100
+
+        tfencoder_input = in_mlp_output.view(batch_size, -1, 50) #[6 50] -> [6 1 50]
+        tfencoder_input = tfencoder_input.transpose(0, 1).contiguous() 
+        tfencoder_output = self.transformer_encoder(tfencoder_input) 
+        tfencoder_output = tfencoder_output.transpose(0, 1).contiguous()
+
+        # print(tfencoder_output.size())
+        
+        if self.multi_process_type == "self_attention":
+            env_info = tfencoder_output[:, 0, :]
+            pass
+        elif self.multi_process_type == "average":
+            env_info = torch.mean(tfencoder_output, dim=1, keepdim=True)
+            env_info = env_info.view(env_info.shape[0], env_info.shape[2])
+            pass
+
+
+        # print(self_state.size(), env_info.size())
+        
+        joint_state = torch.cat([self_state, env_info], dim=1)
+        value = self.action_mlp(joint_state)
+        value = value.view(batch_size, -1)
         return value, env_score
