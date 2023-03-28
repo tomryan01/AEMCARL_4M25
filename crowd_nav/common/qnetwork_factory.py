@@ -91,7 +91,7 @@ class ValueNetworkBase(nn.Module):
                                                   act_layer_type=2)
             pass
         elif self.test_policy_flag == Flag.UseOnlyTf:
-            print("hi2")
+
             return ValueNetworkUseOnlyTransformer(self.input_dim,
                                                   self.self_state_dim,
                                                   self.joint_state_dim,
@@ -112,7 +112,6 @@ class ValueNetworkBase(nn.Module):
                                                  self.action_dims, self.with_dynamic_net, self.with_global_state,
                                                  self.multi_process_type, self.act_steps, self.act_fixed)
         elif self.test_policy_flag == Flag.UseOnlyTfAndGRUAndLidar:
-            print("hi")
             return ValueNetworkTransformerAndGRULidar(self.lidar_input_dim,self.input_dim, self.self_state_dim, self.joint_state_dim,
                                                  self.in_mlp_dims, self.sort_mlp_dims, self.sort_mlp_attention,
                                                  self.action_dims, self.with_dynamic_net, self.with_global_state,
@@ -655,7 +654,7 @@ class ValueNetworkTransformerAndGRU(nn.Module):
         #   0   1       2       3       4   5   6   7     8    9    10      11      12
         # [dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum]
         size = state.shape
-        print(size)
+        # print(size)
         self_state = state[:, 0, :self.self_state_dim].clone().detach()  # 500 x 6 (100 x 5 x 6)
 
         
@@ -755,7 +754,7 @@ class ValueNetworkTransformerAndGRULidar(nn.Module):
         # self.transmlp = mlp(input_dim=250, mlp_dims=[250, 100])
         self.attention_weights = None
         self.step_cnt = 0
-        print(lidar_input_dim)
+        # print(lidar_input_dim)
         self.lidarcnn = LidarEmbeddingCNN(lidar_input_dim)
 
     def get_step_cnt(self):
@@ -764,24 +763,24 @@ class ValueNetworkTransformerAndGRULidar(nn.Module):
 
     def forward(self, self_state: torch.Tensor, lidar_images):
         '''
-        batch_size * seq_len * feature_size
+        batch_size * seq_len * feature_size self state [bx6] -> [bx1x65]
         '''
 
-        img_embedding = self.lidarcnn(lidar_images) #[bxcxhxw] -> [bxe] 
+        img_embedding = self.lidarcnn(lidar_images) #[bxcxhxw] -> [bxe] -> [bx1,65]
         batch_size, embed_len = img_embedding.size()
 
         self_state_ex = torch.zeros(batch_size,1,embed_len).cuda()
-        self_state_ex[:,0, :self.self_state_dim] = self_state.clone().detach() 
+        self_state_ex[:,0, :self.self_state_dim] = self_state.clone()
 
         img_embedding = img_embedding.view(batch_size, -1, embed_len)
         
         if self.multi_process_type == "self_attention":
-            state = torch.cat([img_embedding, self_state_ex], dim=1) #[batch size, num_humans + 1, 13]
+            state = torch.cat([img_embedding, self_state_ex], dim=1) #[batch size, num_humans + 1, 13] [b, 2, 65]
         
         act_h0 = torch.zeros([batch_size * (1 + 1), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
         # act_h0 = torch.zeros([size[0] * (size[1]), self.in_mlp_dims[-1]]).cuda()  # 500 x 50
         in_mlp_output, self.step_cnt = self.in_mlp(state, act_h0)  # batch_sz*num_agents*in_mlp_dims[-1]
-        print("inp_mlp", in_mlp_output.size())
+        # print("inp_mlp", in_mlp_output.size())
         env_score = 0.5  
         
         # 100 * 5 * 100
@@ -800,6 +799,7 @@ class ValueNetworkTransformerAndGRULidar(nn.Module):
             env_info = torch.mean(tfencoder_output, dim=1, keepdim=True)
             env_info = env_info.view(env_info.shape[0], env_info.shape[2])
             pass
+
 
         # print(self_state.size(), env_info.size())
         

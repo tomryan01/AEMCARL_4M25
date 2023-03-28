@@ -65,6 +65,8 @@ class LidarPolicy(ACTENVCARL):
         # logging.info('Policy: {} {} global state'.format(self.name, 'w/' if with_global_state else 'w/o'))
         # logging.info('Policy: {} {} interaction state'.format(self.name, 'w/' if with_interaction else 'w/o'))
 
+    def input_dim(self):
+        return 65
 
     def predict(self, state):
         """
@@ -104,7 +106,7 @@ class LidarPolicy(ACTENVCARL):
                 if self.query_env:
                     next_human_states, next_lidar_image, reward, done, info = self.env.onestep_lookahead(action, need_build_map)
                     need_build_map = False
-                    print(type(next_lidar_image))
+                    # print(type(next_lidar_image))
                 else:
                     next_human_states = [
                         self.propagate(human_state, ActionXY(human_state.vx, human_state.vy))
@@ -117,7 +119,7 @@ class LidarPolicy(ACTENVCARL):
                 next_self_state = torch.Tensor(next_self_state.get_state()).to(self.device)
                 next_lidar_image = next_lidar_image.to(self.device)
                 rotate_next_self_state = self.rotate(next_self_state.unsqueeze(0))
-                print(rotate_next_self_state.size())
+                # print(rotate_next_self_state.size())
 
                 # VALUE UPDATE
 
@@ -142,9 +144,12 @@ class LidarPolicy(ACTENVCARL):
                 else:
                     print("step count too large!!")
                 pass
-
-        # if self.phase == 'train':
-        #     self.last_state = self.transform(state)
+        
+        if self.phase == 'train':
+            self_state = torch.Tensor(state.self_state.get_state()).to(self.device)
+            rotated_self = self.rotate(self_state.unsqueeze(0)).squeeze()
+            image = state.lidar_state.to(self.device)
+            self.last_state = (rotated_self, image)
         return max_action
     
     def rotate(self, state):

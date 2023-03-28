@@ -25,7 +25,8 @@ class Explorer(object):
                        update_memory=False,
                        imitation_learning=False,
                        episode=None,
-                       print_failure=False):
+                       print_failure=False,
+                       lidar_img = False):
         # logging("run episodes: %d"%(k))
         self.robot.policy.set_phase(phase)
         success_times = []
@@ -43,15 +44,21 @@ class Explorer(object):
 
         for i in range(k):
             time_begin = t.time()
-            ob = self.env.reset(phase)
+            ob, lidar_image = self.env.reset(phase) # [oberservable_states for humans], image
             done = False
             states = []
             actions = []
             rewards = []
             while not done:
-                action = self.robot.act(ob)
-                ob, reward, done, info = self.env.step(action)
-                states.append(self.robot.policy.last_state)
+                if not lidar_img:
+                    action = self.robot.act(ob)
+                    ob, reward, done, info = self.env.step(action)
+                else:
+                    action= self.robot.act(ob, lidar_image) 
+                    ob, lidar_image, reward, done, info = self.env.step(action)
+                    # print(ob)
+                # print(self.robot.policy.last_state)
+                states.append(self.robot.policy.last_state) #(rotated_self, image)
                 actions.append(action)
                 rewards.append(reward)
 
@@ -117,12 +124,15 @@ class Explorer(object):
 
         for i, state in enumerate(states):
             reward = rewards[i]
-
             # VALUE UPDATE
             if imitation_learning:
                 # define the value of states in IL as cumulative discounted rewards, which is the same in RL
-                state = self.target_policy.transform(state)  #CADRL.transform(state)
+                # state = self.target_policy.transform(state)  #CADRL.transform(state)
                 # value = pow(self.gamma, (len(states) - 1 - i) * self.robot.time_step * self.robot.v_pref)
+                self_state = torch.Tensor(state.self_state.get_state()).to(self.device)
+                rotated_self = self.target_policy.rotate(self_state.unsqueeze(0)).squeeze()
+                image = state.lidar_state.to(self.device)
+                state = (rotated_self, image)
                 value = sum([
                     pow(self.gamma,
                         max(t - i, 0) * self.robot.time_step * self.robot.v_pref) * reward * (1 if t >= i else 0)
@@ -135,7 +145,7 @@ class Explorer(object):
                 else:
                     next_state = states[i + 1]
                     gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
-                    action_value, _ = self.target_model(next_state.unsqueeze(0))
+                    action_value, _ = self.target_model(next_state[0],next_state[1])
                     value = reward + gamma_bar * action_value.data.item()
             value = torch.Tensor([value]).to(self.device)
 

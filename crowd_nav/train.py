@@ -8,11 +8,13 @@ import torch
 import gym
 
 # import git
-from crowd_sim.envs.utils.robot import Robot
+from crowd_sim.envs.utils.robot import Robot, RobotLidar
 from crowd_nav.utils.trainer import Trainer
 from crowd_nav.utils.memory import ReplayMemory
 from crowd_nav.utils.explorer import Explorer
 from crowd_nav.policy.policy_factory import policy_factory
+
+import matplotlib.pyplot as plt
 
 dir_prefix = "crowd_nav/"
 
@@ -24,13 +26,13 @@ def main():
     parser.add_argument("--policy_config", type=str, default="configs/policy.config")
     # parser.add_argument('--train_config', type=str, default='configs/train-test.config')
     parser.add_argument("--train_config", type=str, default="configs/train.config")
-    parser.add_argument("--output_dir", type=str, default="data2/actenvcarl_alltf")
+    parser.add_argument("--output_dir", type=str, default="data3/actenvcarl_lidar")
     parser.add_argument("--weights", type=str)
     parser.add_argument("--resume", default=False, action="store_true")
     parser.add_argument("--gpu", default=True, action="store_true")
     parser.add_argument("--debug", default=True, action="store_true")
     parser.add_argument("--phase", type=str, default="train")
-    parser.add_argument("--test_policy_flag", type=str, default="1")
+    parser.add_argument("--test_policy_flag", type=str, default="7")
     parser.add_argument("--optimizer", type=str, default="SGD")
     parser.add_argument("--multi_process", type=str, default="average")
 
@@ -82,7 +84,7 @@ def main():
         shutil.copy(args.policy_config, args.output_dir)
         shutil.copy(args.train_config, args.output_dir)
         shutil.copy("utils/trainer.py", args.output_dir)
-        shutil.copy("policy/" + args.policy + ".py", args.output_dir)
+        # shutil.copy("policy/" + args.policy + ".py", args.output_dir)
     log_file = os.path.join(args.output_dir, "output.log")
     il_weight_file = os.path.join(args.output_dir, "il_model.pth")
     rl_weight_file = os.path.join(args.output_dir, "rl_model.pth")
@@ -104,7 +106,7 @@ def main():
     logging.info("Using device: %s", device)
 
     # configure policy
-    policy = policy_factory[args.policy]()
+    policy = policy_factory[args.policy]()  # picks policy
     # policy.set_phase(args.phase)
     print("policy type: ", type(policy))
 
@@ -115,10 +117,10 @@ def main():
     policy_config = configparser.RawConfigParser()
     policy_config.read(args.policy_config)
 
-    policy_config.set("actenvcarl", "test_policy_flag", args.test_policy_flag)
-    policy_config.set("actenvcarl", "multi_process", args.multi_process)
-    policy_config.set("actenvcarl", "act_steps", args.act_steps)
-    policy_config.set("actenvcarl", "act_fixed", args.act_fixed)
+    policy_config.set("lidar", "test_policy_flag", args.test_policy_flag)
+    policy_config.set("lidar", "multi_process", args.multi_process)
+    policy_config.set("lidar", "act_steps", args.act_steps)
+    policy_config.set("lidar", "act_fixed", args.act_fixed)
 
     policy.configure(policy_config)
     policy.set_device(device)
@@ -135,8 +137,9 @@ def main():
     env.configure(env_config)
 
     # 只是为了获取部分的环境配置信息,如半径速度啥的
-    robot = Robot(env_config, "robot")
-    env.set_robot(robot)
+    robot = RobotLidar(env_config, "robot")
+    robot.sensor = 'lidar_images'
+    env.set_robot(robot) # add robot to environment
 
     # read training parameters
     if args.train_config is None:
@@ -157,15 +160,15 @@ def main():
     checkpoint_interval = train_config.getint("train", "checkpoint_interval")
 
     # configure trainer and explorer
-    memory = ReplayMemory(capacity)
+    memory = ReplayMemory(capacity) # this stores tuples of what happens
 
-    model = policy.get_model()
+    model = policy.get_model() 
 
     batch_size = train_config.getint("trainer", "batch_size")
 
-    trainer = Trainer(model, memory, device, batch_size)
+    trainer = Trainer(model, memory, device, batch_size) # handles actually updating the model 
 
-    explorer = Explorer(env, robot, device, memory, policy.gamma, target_policy=policy)
+    explorer = Explorer(env, robot, device, memory, policy.gamma, target_policy=policy) #runs episodes
 
     # imitation learning
     if args.resume:
@@ -187,13 +190,16 @@ def main():
             safety_space = 0
         else:
             safety_space = train_config.getfloat("imitation_learning", "safety_space")
-        il_policy = policy_factory[il_policy]()
+        il_policy = policy_factory[il_policy]() #orca is the imation learning policy
         il_policy.multiagent_training = policy.multiagent_training
         il_policy.safety_space = safety_space
 
+        # print(memory.memory)
         print("il_policy: ", type(il_policy))
-        robot.set_policy(il_policy)
-        explorer.run_k_episodes(200, "train", update_memory=True, imitation_learning=True)
+        robot.set_policy(il_policy) # use ORCA
+        explorer.run_k_episodes(200, "train", update_memory=True, imitation_learning=True, lidar_img=True)
+
+        # print(memory.memory)
 
         trainer.optimize_epoch(il_epochs)
 
@@ -226,10 +232,11 @@ def main():
 
         # evaluate the model
         if episode % evaluation_interval == 0:
-            explorer.run_k_episodes(env.case_size["val"], "val", episode=episode)
+            explorer.run_k_episodes(env.case_size["val"], "val", episode=episode, lidar_img=True)
 
         # sample k episodes into memory and optimize over the generated memory
-        explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode)
+        explorer.run_k_episodes(sample_episodes, "train", update_memory=True, episode=episode, lidar_img=True)
+
         trainer.optimize_batch(train_batches)
         episode += 1
 
@@ -243,7 +250,7 @@ def main():
             torch.save(model.state_dict(), rl_weight_file, _use_new_zipfile_serialization=False)
 
     # final test
-    explorer.run_k_episodes(env.case_size["test"], "test", episode=episode)
+    explorer.run_k_episodes(env.case_size["test"], "test", episode=episode, lidar_img=True )
 
 
 if __name__ == "__main__":

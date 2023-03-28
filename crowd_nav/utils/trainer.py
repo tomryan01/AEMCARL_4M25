@@ -44,13 +44,19 @@ class Trainer(object):
         average_epoch_loss = 0
         for epoch in range(num_epochs):  #
             epoch_loss = 0
-            for data in self.data_loader:
-                inputs, values = data
-                inputs = Variable(inputs)
-                values = Variable(values)
+            for data in self.data_loader: #
+                inputs, values = data # (rotated_self, lidar_image), value
+                # inputs = Variable(inputs)
+                # values = Variable(values)
+                # print(len(inputs))
+                # print(inputs[0].device)
+                # print(inputs[1].device)
+
+                # print(values.size())
 
                 self.optimizer.zero_grad()  #Clears the gradients of all optimized torch.Tensors.
-                outputs, _ = self.model(inputs)
+                outputs, _ = self.model(inputs[0], inputs[1])
+                # print(outputs.size())
                 loss = self.criterion(outputs, values)  #Compute MSELoss
                 loss.backward()
                 self.optimizer.step()  # updates the parameters after the  gradients are computed using e.g. backward().
@@ -70,11 +76,11 @@ class Trainer(object):
         losses = 0
         for _ in range(num_batches):
             inputs, values = next(iter(self.data_loader))
-            inputs = Variable(inputs)
-            values = Variable(values)
+            # inputs = Variable(inputs)
+            # values = Variable(values)
 
             self.optimizer.zero_grad()
-            outputs, _ = self.model(inputs)
+            outputs, _ = self.model(inputs[0], inputs[1])
             loss = self.criterion(outputs, values)
             loss.backward()
             self.optimizer.step()

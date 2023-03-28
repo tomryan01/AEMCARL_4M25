@@ -161,7 +161,8 @@ def main():
         if args.traj:
             env.render('traj', args.video_file)
         else:
-            env.render('video', args.video_file)
+            # env.render('video', os.path.join(os.getcwd(), 'animation.gif'))
+            env.render('lidar', args.video_file)
 
         logging.info('It takes %.2f seconds to finish. Final status is %s', env.global_time, info)
         if robot.visible and info == 'reach goal':
@@ -171,7 +172,7 @@ def main():
         logging.info("run k episodes")
 
         # explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
-        explorer.run_k_episodes(50, args.phase, print_failure=True)
+        explorer.run_k_episodes(50, args.phase, print_failure=True, lidar_img=True)
 
 
 if __name__ == '__main__':

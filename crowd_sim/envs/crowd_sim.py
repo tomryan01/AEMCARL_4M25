@@ -575,13 +575,16 @@ class CrowdSim(gym.Env):
         return shifted
         
     def construct_img(self, scans):
-        assert len(scans) == 10
+        assert len(scans) > 0
         # Normalize 
+        image = np.zeros((10, len(scans[0])))
         d_max = np.max(scans)
         scans = np.array(scans)
         intensities = ((scans) * 255 / d_max).astype(np.uint8)
+        image[-len(scans):] = intensities
 
-        return intensities
+
+        return image
 
 
     def reset(self, phase='test', test_case=None):
@@ -783,12 +786,9 @@ class CrowdSim(gym.Env):
             if(self.global_time != 0):
                 scan_app = self.shift_scan(scan,self.robot.vx,self.robot.vy, time_step)
                 self.lidar_scans.append(scan_app)
-                if len(self.lidar_scans) >= 10:
-                    latest_scans = self.lidar_scans[-10:]
-                    # print("scans shape:",len(latest_scans))
-                    lidar_image = self.construct_img(latest_scans)
-                    lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
-
+                latest_scans = self.lidar_scans[-min(10, len(self.lidar_scans)):]
+                lidar_image = self.construct_img(latest_scans)
+                lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
                     # plt.imshow(lidar_image)
                     # plt.show()
                     # lidar_embedding = run(lidar_image)
@@ -800,12 +800,9 @@ class CrowdSim(gym.Env):
             if(done):
                 scan_app = self.shift_scan(scan,self.robot.vx,self.robot.vy, time_step)
                 self.lidar_scans.append(scan_app)
-                if len(self.lidar_scans) >= 10:
-                    latest_scans = self.lidar_scans[-10:]
-                    lidar_image = self.construct_img(latest_scans)
-                    lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
-                else:
-                    lidar_image = torch.zeros(1,10,450)
+                latest_scans = self.lidar_scans[-min(10, len(self.lidar_scans)):]
+                lidar_image = self.construct_img(latest_scans)
+                lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
                 # print("scans shape:",len(latest_scans))
                 
             
@@ -827,13 +824,16 @@ class CrowdSim(gym.Env):
                 if self.human_times[i] == 0 and human.reached_destination():
                     self.human_times[i] = self.global_time
 
+            # print(self.robot.sensor)
             # compute the observation
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_observable_state() for human in self.humans]
-            elif self.robot.sensor == 'lidar':
-                # todo: take human angles and put into some sort of observation - what does that mean for our case?
-                human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
-                self.scans.append(self.scan_to_points(self.scan_lidar()))
+            # elif self.robot.sensor == 'lidar':
+            #     # todo: take human angles and put into some sort of observation - what does that mean for our case?
+            #     human_angles = [human.get_scan(360, self.robot.px, self.robot.py) for human in self.humans]
+            #     self.scans.append(self.scan_to_points(self.scan_lidar()))
+            elif self.robot.sensor == 'lidar_images':
+                ob = [human.get_observable_state() for human in self.humans]
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
         else:
@@ -847,8 +847,8 @@ class CrowdSim(gym.Env):
                 next_rob_state = self.robot.get_next_observable_state(action)
                 scan = self.scan_lidar(ob,next_rob_state)
                 scan_app = self.shift_scan(scan, next_rob_state.vx, next_rob_state.vy, self.time_step)
-                if len(self.lidar_scans) >= 9:
-                    latest_scans = self.lidar_scans[-9:]
+                if len(self.lidar_scans) >= 1:
+                    latest_scans = self.lidar_scans[-min(9, len(self.lidar_scans)):]
                     latest_scans.append(scan_app)
                     lidar_image = self.construct_img(latest_scans)
                     lidar_image = torch.tensor(lidar_image,dtype = torch.float32).unsqueeze(0)
@@ -867,7 +867,7 @@ class CrowdSim(gym.Env):
             self.agent_prev_vy = action.v * np.sin(action.r + self.robot.theta)
 
 
-        return ob, lidar_image, reward, done, info
+        return ob, lidar_image, reward, done, info # [human_observable states], tensor([1,10,450])
 
     def render(self, mode='human', output_file=None):
         from matplotlib import animation
@@ -1014,7 +1014,7 @@ class CrowdSim(gym.Env):
             for arrow in arrows:
                 ax.add_artist(arrow)
 
-            if self.robot.sensor == 'lidar':
+            if self.robot.sensor == 'lidar_images':
                 scan_points = self.scans[0]
                 xs = [scan_points[i][0] for i in range(len(scan_points))]
                 ys = [scan_points[i][1] for i in range(len(scan_points))]
@@ -1027,7 +1027,7 @@ class CrowdSim(gym.Env):
                 nonlocal arrows
                 global_step = frame_num
                 robot.center = robot_positions[frame_num]
-                if self.robot.sensor == 'lidar':
+                if self.robot.sensor == 'lidar_images':
                     scan_points = self.scans[frame_num]
                     xs = [scan_points[i][0] for i in range(len(scan_points))]
                     ys = [scan_points[i][1] for i in range(len(scan_points))]
@@ -1050,6 +1050,7 @@ class CrowdSim(gym.Env):
                     #     attention_scores[i].set_text('human {}: {:.2f}'.format(i, self.attention_weights[frame_num][i]))
 
                 time.set_text('Time: {:.2f}'.format(frame_num * self.time_step))
+
 
             def plot_value_heatmap():
                 assert self.robot.kinematics == 'holonomic'
@@ -1094,5 +1095,27 @@ class CrowdSim(gym.Env):
                 anim.save(output_file, writer=writer)
             else:
                 plt.show()
+        elif mode == 'lidar':
+            fig, ax = plt.subplots()
+
+
+            def update(frame_num):
+                ax.clear()
+                if frame_num >= 10:
+                    latest_scans = self.lidar_scans[frame_num-10:frame_num]
+                    # print("scans shape:",len(latest_scans))
+                    lidar_image = self.construct_img(latest_scans)
+                else:
+                    lidar_image = np.zeros((10,450))
+                    if frame_num > 0:
+                        lidar_image[-frame_num:, :] = self.construct_img(self.lidar_scans[:frame_num])
+
+                ax.imshow(lidar_image)
+            anim = animation.FuncAnimation(fig, update, frames=len(self.scans), interval=self.time_step * 1000)
+            anim.running = True
+            plt.show()
+            
+
+
         else:
             raise NotImplementedError
