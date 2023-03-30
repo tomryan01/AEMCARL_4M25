@@ -639,76 +639,23 @@ class CrowdSim(gym.Env):
         return self.step(action, update=False, rebuild=rebuild)
 
     def find_assignment(self, prev_dets_xy, dets_xy):
-        # find OF predictions for next positions based on prev detections
 
-        prev_dets = prev_dets_xy.copy()
-        dets = dets_xy.copy()
-        # transform from (-6,6) to (0,12)
-        # prev_dets += 6.
-        # prev_dets = np.float32(prev_dets.reshape(len(prev_dets), 1, 2))
-        # dets += 6.
-
-        # # image of previous frame
-        # prev_frame = np.zeros((32,32,3), dtype=np.float32)
-        # for i in range(len(prev_dets)):
-        #     item = prev_dets[i]
-        #     x, y = item[0]
-        #     x = int(x)
-        #     y = int(y)
-        #     prev_frame[x][y] = 255. - (i*10)
-        # prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-
-        # # image of current frame
-        # curr_frame = np.zeros((32,32,3), dtype=np.float32)
-        # for i in range(len(dets)):
-        #     item = dets[i]
-        #     x, y = item
-        #     x = int(x)
-        #     y = int(y)
-        #     curr_frame[x][y] = 255. - (i*10)
-        # curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
-
-        # # print("SHAPES")
-        # # print(prev_frame.shape)
-        # # print(curr_frame.shape)
-        # prev_frame = np.uint8(prev_frame)
-        # curr_frame = np.uint8(curr_frame)
-        # # optical flow predicts positions of current detections
-        # # preserving ordering of prev_dets
-        # lk_params = dict( winSize  = (15, 15),
-        #                 maxLevel = 2,
-        #                 criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-        # OF_preds, st, err = cv2.calcOpticalFlowPyrLK(prev_frame, curr_frame, prev_dets, None, **lk_params)
-
-        # # next_pos_preds = OF_preds[st==1]
-        # next_pos_preds = OF_preds
-        # assert len(next_pos_preds) == len(dets)
-
-        # match OF preds with current detections with hungarian algorithm
-        # cost matrix
-        n = len(prev_dets)
-        costs = np.zeros((n, n))
-        #            det1 det2 ...
-        # of_pred1
-        # of_pred2
-        # ...
-
+        # use hungarian algorithm to find correspondences between current and previous detections
+        n = self.human_num
+        m = len(dets_xy)
+        if m > n: raise ValueError("Number of detections must not be greater than the number of humans")
+        
+        # compute cost matrix
+        costs = np.zeros((n, m))
         for i in range(n):
-            # of_pred = next_pos_preds[i]
-            prev_det = prev_dets[i]
-            for j in range(n):
-                det = dets[j]
-                # dist = distance.euclidean(of_pred, det)
-                dist = distance.euclidean(prev_det, det)
+            for j in range(m):
+                dist = distance.euclidean(prev_dets_xy[i], dets_xy[j])
                 costs[i][j] = dist
 
+        # compute optimal assignments
         row_ind, col_ind = linear_sum_assignment(costs)
-        col_ind = np.array(col_ind)
-        # col_ind = np.arange(len(dets))
-        # col_ind = np.array([4,2,1,0,3])
-        # dets -= 6.
-        # print(col_ind)
-        return col_ind
+
+        return row_ind, col_ind
 
 
     def step(self, action, update=True, rebuild=True):
@@ -814,7 +761,6 @@ class CrowdSim(gym.Env):
                 self.action_values.append(self.robot.policy.action_values)
             if hasattr(self.robot.policy, 'get_attention_weights'):
                 self.attention_weights.append(self.robot.policy.get_attention_weights())
-
             
 
             # get LiDAR scan
@@ -829,38 +775,30 @@ class CrowdSim(gym.Env):
 
             # get people detections (positions)
             full_dets_xy, dets_cls, instance_mask = self.detector(scan) 
-            cls_mask = dets_cls > 0.1
-            # print("cls_mask",cls_mask)
-            dets_xy = full_dets_xy[cls_mask]
 
-
-
-            # correct the current detection set if too short or long
-            num_detections = len(dets_xy)
-            if num_detections < len(self.humans):
-                if len(full_dets_xy) > len(dets_xy): # fill in with the more unlikely detections
-                    dets_xy = full_dets_xy
-                    if len(dets_xy) < len(self.humans): # assign random numbers if run out of detections
-                        rem = len(self.humans) - len(dets_xy)
-                        random_positions = np.random.rand(rem,2) * 2
-                        dets_xy = np.concatenate([dets_xy, random_positions])
-            if len(dets_xy) > len(self.humans):
-                # remove least likely predictions from end
-                dets_xy = dets_xy[:len(self.humans),:]
+            # determine most likely detections 
+            detect_idx = np.argsort(dets_cls)
+            dets_xy = full_dets_xy[detect_idx]
+            if len(dets_xy) > self.human_num: dets_xy = dets_xy[-self.human_num:]
 
             # process detections
             robot_positions = [state[0].position for state in self.states]
             dets_xy *= -1
             dets_xy += robot_positions[-1]
-            
+
 
             if len(self.detections) > 0: # beyond first pass - match to previous detections
                 # get previous set of detections
                 prev_dets_xy = self.detections[-1]
-                # print(dets_xy)
-                curr_assignment = self.find_assignment(prev_dets_xy, dets_xy)
-                dets_xy = dets_xy[curr_assignment]
-                # print(dets_xy)
+
+                # compute assignments and changing of detection arrays
+                rows, cols = self.find_assignment(prev_dets_xy, dets_xy)
+                new_dets = dets_xy.copy()
+                for i in range(len(cols)):
+                    dets_xy[rows[i]] = new_dets[cols[i]]
+                for i in list(set(range(self.human_num)) - set(rows)):
+                    dets_xy[i] = prev_dets_xy[i]
+                
             # if first set of detections, skip optical flow (initial ids are A-E)
 
             assert len(dets_xy) == len(self.humans)
