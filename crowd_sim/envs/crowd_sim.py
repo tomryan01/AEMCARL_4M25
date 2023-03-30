@@ -392,6 +392,10 @@ class CrowdSim(gym.Env):
                         if not collide:
                             break
                     human.set(px, py, px, py, 0, 0, 0)
+                    if self.robot.sensor == 'lidar':
+                        human.detector_px = px
+                        human.detector_py = py
+                        human.set_detected_state([px, py], self.agent_timestep)
                     self.humans.append(human)
             else:
                 # the first 2 two humans will be in the circle crossing scenarios
@@ -426,6 +430,10 @@ class CrowdSim(gym.Env):
             if not collide:
                 break
         human.set(px, py, -px, -py, 0, 0, 0)
+        if self.robot.sensor == 'lidar':
+            human.detector_px = px
+            human.detector_py = py
+            human.set_detected_state([px, py], self.agent_timestep)
         return human
 
     def generate_square_crossing_human(self):
@@ -457,6 +465,10 @@ class CrowdSim(gym.Env):
             if not collide:
                 break
         human.set(px, py, gx, gy, 0, 0, 0)
+        if self.robot.sensor == 'lidar':
+            human.detector_px = px
+            human.detector_py = py
+            human.set_detected_state([px, py], self.agent_timestep)
         return human
 
     def get_human_times(self):

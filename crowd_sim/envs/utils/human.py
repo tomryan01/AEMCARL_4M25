@@ -11,9 +11,6 @@ class Human(Agent):
         self.detector_vx = None
         self.detector_vy = None
 
-        self.prev_detector_px = None
-        self.prev_detector_py = None
-
     def act(self, ob):
         """
         The state for human is its full state and all other agents' observable states
@@ -29,16 +26,15 @@ class Human(Agent):
         return ObservableState(self.detector_px, self.detector_py, self.detector_vx, self.detector_vy, self.radius)
 
     def set_detected_state(self, position, time_step):
+        if self.detector_px is None or self.detector_py is None:
+            raise AttributeError("Need to set detector px and py before calling set_detected_state")
         
         self.set_detected_position(position)
-        if self.prev_detector_px is not None:
-            old_pos = np.array([self.prev_detector_px, self.prev_detector_py])
-            new_vel = (position - old_pos) / time_step
-            self.set_detected_velocity(new_vel)
+        old_pos = np.array([self.detector_px, self.detector_py])
+        new_vel = (position - old_pos) / time_step
+        self.set_detected_velocity(new_vel)
 
     def set_detected_position(self, position):
-        self.prev_detector_px = self.detector_px
-        self.prev_detector_py = self.detector_py
         self.detector_px = position[0]
         self.detector_py = position[1]
 
