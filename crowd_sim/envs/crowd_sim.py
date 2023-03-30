@@ -539,18 +539,7 @@ class CrowdSim(gym.Env):
 
         for i in range(res):
             if out_scan[i] == np.inf:
-                ang = np.deg2rad(360*i/res)
-                if  0 <= ang < theta1 or theta4 <= ang < 2*np.pi:
-                    out_scan[i] = (dim-x)/np.cos(ang)
-                elif theta1 <= ang < theta2:
-                    out_scan[i] = (dim-y)/np.sin(ang)
-                elif theta2 <= ang < theta3:
-                    out_scan[i] = -(dim+x)/np.cos(ang)
-                else:
-                    out_scan[i] = -(dim+y)/np.sin(ang)
-                
-            
-        # print(out_scan)
+                out_scan[i] = 100 # todo: maybe add some rigour here
         return out_scan
     
     def scan_to_points(self, scan):
