@@ -703,7 +703,6 @@ class CrowdSim(gym.Env):
     def render(self, mode='human', output_file=None):
         from matplotlib import animation
         import matplotlib.pyplot as plt
-        plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
 
         x_offset = 0.11
         y_offset = 0.11
@@ -906,9 +905,7 @@ class CrowdSim(gym.Env):
             anim.running = True
 
             if output_file is not None:
-                ffmpeg_writer = animation.writers['ffmpeg']
-                writer = ffmpeg_writer(fps=8, metadata=dict(artist='Me'), bitrate=1800)
-                anim.save(output_file, writer=writer)
+                anim.save(output_file, writer='imagemagick')
             else:
                 plt.show()
         else:
