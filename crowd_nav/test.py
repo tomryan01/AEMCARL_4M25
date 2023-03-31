@@ -12,11 +12,6 @@ from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.policy.orca import ORCA
 import sys
 
-def evaluate_test(num_test_cases, explorer):
-
-    # summary statistics across selection of test cases
-    explorer.run_k_episodes(500, "test") #num_test_cases
-
 def main():
     parser = argparse.ArgumentParser('Parse configuration file')
     parser.add_argument('--env_config', type=str, default='configs/env.config')
@@ -62,6 +57,9 @@ def main():
     reward_increment = args.reward_increment
     position_variance = args.position_variance
     direction_variance = args.direction_variance
+
+    if args.evaluate and args.visualize:
+        raise ValueError("Cannot have both evaluate and visualize = True")
 
     agent_visible = args.visible
     print(agent_timestep, " ", human_timestep, " ", reward_increment, " ", position_variance, " ", direction_variance,
@@ -140,7 +138,10 @@ def main():
 
     robot.set_policy(policy)
     env.set_robot(robot)
-    explorer = Explorer(env, robot, device, gamma=0.9)
+    if args.evaluate:
+        explorer = ExplorerTest(env, robot, device, gamma=0.9)
+    else:
+        explorer = Explorer(env, robot, device, gamma=0.9)
 
     policy.set_phase(args.phase)
     policy.set_device(device)
@@ -175,14 +176,8 @@ def main():
             logging.info('Average time for humans to reach goal: %.2f', sum(human_times) / len(human_times))
     else:
         logging.info("run k episodes")
-
         # explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
-        explorer.run_k_episodes(50, args.phase, print_failure=True)
-
-    if args.evaluate:
-        # explorer = Explorer(env, robot, device, policy.gamma, target_policy=policy)
-        explorer = ExplorerTest(env, robot, device, gamma=0.9)
-        evaluate_test(env.case_size["test"], explorer)
+        explorer.run_k_episodes(1, args.phase, print_failure=True)
 
 
 if __name__ == '__main__':
