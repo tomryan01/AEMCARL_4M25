@@ -32,6 +32,7 @@ def main():
     parser.add_argument("--optimizer", type=str, default="SGD")
     parser.add_argument("--multi_process", type=str, default="average")
     parser.add_argument("--human_num", type=int, default=5)
+    parser.add_argument("--noise", type=float, default=0.)
 
     # 环境reward相关的参数
     parser.add_argument("--agent_timestep", type=float, default=0.4)
@@ -50,6 +51,7 @@ def main():
     args = parser.parse_args()
 
     human_num = args.human_num
+    noise = args.noise
     agent_timestep = args.agent_timestep
     human_timestep = args.human_timestep
     reward_increment = args.reward_increment
@@ -110,6 +112,7 @@ def main():
     env_config.read(env_config_file)
 
     env_config.set("sim", "human_num", human_num)
+    env_config.set("sim", "noise", noise)
     env_config.set("reward", "agent_timestep", agent_timestep)
     env_config.set("reward", "human_timestep", human_timestep)
     env_config.set("reward", "reward_increment", reward_increment)

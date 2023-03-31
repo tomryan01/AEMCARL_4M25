@@ -285,6 +285,8 @@ class CrowdSim(gym.Env):
             self.square_width = config.getfloat('sim', 'square_width')
             self.circle_radius = config.getfloat('sim', 'circle_radius')
             self.human_num = config.getint('sim', 'human_num')
+            self.observation_noise = config.getfloat('sim', 'noise')
+            if self.observation_noise == 0.0: self.observation_noise = None
         else:
             raise NotImplementedError
 
