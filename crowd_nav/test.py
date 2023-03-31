@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import gym
 from crowd_nav.utils.explorer import Explorer
+from crowd_nav.utils.explorer_test import ExplorerTest
 from crowd_nav.policy.policy_factory import policy_factory
 from crowd_sim.envs.utils.robot import Robot
 from crowd_sim.envs.policy.orca import ORCA
@@ -24,6 +25,7 @@ def main():
     parser.add_argument('--test_case', type=int, default=None)
     parser.add_argument('--square', default=False, action='store_true')
     parser.add_argument('--circle', default=False, action='store_true')
+    parser.add_argument('--evaluate', default=False, action='store_true')
 
     parser.add_argument('--video_file', type=str, default=None)
     parser.add_argument('--traj', default=False, action='store_true')
@@ -49,6 +51,9 @@ def main():
     parser.add_argument("--act_fixed", default=False, action="store_true")
 
     args = parser.parse_args()
+
+    if args.visualize and args.evaluate:
+        raise ValueError("Cannot have visualize and evaluate")
 
     human_num = args.human_num
     noise = args.noise
@@ -133,7 +138,10 @@ def main():
 
     robot.set_policy(policy)
     env.set_robot(robot)
-    explorer = Explorer(env, robot, device, gamma=0.9)
+    if args.evaluate:
+        explorer = ExplorerTest(env, robot, device, gamma=0.9)
+    else:
+        explorer = Explorer(env, robot, device, gamma=0.9)
 
     policy.set_phase(args.phase)
     policy.set_device(device)
@@ -170,7 +178,7 @@ def main():
         logging.info("run k episodes")
 
         # explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
-        explorer.run_k_episodes(50, args.phase, print_failure=True)
+        explorer.run_k_episodes(1, args.phase, print_failure=True)
 
 
 if __name__ == '__main__':
