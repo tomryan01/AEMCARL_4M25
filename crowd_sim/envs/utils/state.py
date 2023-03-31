@@ -1,3 +1,5 @@
+import numpy as np
+
 class FullState(object):
     def __init__(self, px, py, vx, vy, radius, gx, gy, v_pref, theta):
         self.px = px
@@ -38,6 +40,17 @@ class ObservableState(object):
 
     def __str__(self):
         return ' '.join([str(x) for x in [self.px, self.py, self.vx, self.vy, self.radius]])
+
+class NoisyObservableState(ObservableState):
+    def __init__(self, px, py, vx, vy, radius, noise):
+        super().__init__(px, py, vx, vy, radius)
+        self.px += np.random.randn() * noise
+        self.py += np.random.randn() * noise
+        self.vx += np.random.randn() * noise
+        self.vy += np.random.randn() * noise
+
+    def of(other : ObservableState, noise : float):
+        return NoisyObservableState(other.px, other.py, other.vx, other.vy, other.radius, noise)
 
 
 class JointState(object):

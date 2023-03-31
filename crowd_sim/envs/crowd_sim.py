@@ -10,7 +10,7 @@ from numpy.linalg import norm
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import *
 from crowd_sim.envs.utils.utils import point_to_segment_dist
-from crowd_sim.envs.utils.state import FullState
+from crowd_sim.envs.utils.state import FullState, NoisyObservableState
 from scipy.stats import norm as norm_pdf
 from numba import jit, cuda
 import math
@@ -551,6 +551,10 @@ class CrowdSim(gym.Env):
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
+        # add noise if applicable
+        if self.observation_noise is not None:
+            ob = [NoisyObservableState.of(o, self.observation_noise) for o in ob]
+
         return ob
 
     def onestep_lookahead(self, action, rebuild=True):
@@ -689,6 +693,10 @@ class CrowdSim(gym.Env):
         else:
             self.agent_prev_vx = action.v * np.cos(action.r + self.robot.theta)
             self.agent_prev_vy = action.v * np.sin(action.r + self.robot.theta)
+        
+        # add noise if applicable
+        if self.observation_noise is not None:
+            ob = [NoisyObservableState.of(o, self.observation_noise) for o in ob]
 
         return ob, reward, done, info
 
