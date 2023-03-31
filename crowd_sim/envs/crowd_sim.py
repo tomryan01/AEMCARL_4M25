@@ -539,7 +539,7 @@ class CrowdSim(gym.Env):
 
         for i in range(res):
             if out_scan[i] == np.inf:
-                out_scan[i] = 100 # todo: maybe add some rigour here
+                out_scan[i] = 200 # todo: maybe add some rigour here
         return out_scan
     
     def scan_to_points(self, scan):
@@ -549,6 +549,14 @@ class CrowdSim(gym.Env):
             coords.append([self.robot.px + scan[i]*np.cos(np.deg2rad(ang)), self.robot.py + scan[i]*np.sin(np.deg2rad(ang))])
 
         return coords
+
+    def detect(self, scan):
+        dets, dcls, mask = self.detector(scan)
+        del_mask = np.where(np.linalg.norm(dets, axis=-1) > 10, True, False)
+        dcls = np.delete(dcls, del_mask, axis=0)
+        dets = np.delete(dets, del_mask, axis=0)
+            
+        return dets, dcls, mask
 
 
     def reset(self, phase='test', test_case=None):
@@ -763,7 +771,7 @@ class CrowdSim(gym.Env):
 
 
             # get people detections (positions)
-            full_dets_xy, dets_cls, instance_mask = self.detector(scan) 
+            full_dets_xy, dets_cls, instance_mask = self.detect(scan) 
 
             # determine most likely detections 
             detect_idx = np.argsort(dets_cls)
@@ -782,11 +790,13 @@ class CrowdSim(gym.Env):
 
                 # compute assignments and changing of detection arrays
                 rows, cols = self.find_assignment(prev_dets_xy, dets_xy)
-                new_dets = dets_xy.copy()
+                new_dets = np.zeros((self.human_num, 2))
                 for i in range(len(cols)):
-                    dets_xy[rows[i]] = new_dets[cols[i]]
+                    new_dets[rows[i]] = dets_xy[cols[i]]
                 for i in list(set(range(self.human_num)) - set(rows)):
-                    dets_xy[i] = prev_dets_xy[i]
+                    new_dets[i] = prev_dets_xy[i]
+
+                dets_xy = new_dets.copy()
                 
             # if first set of detections, skip optical flow (initial ids are A-E)
 
