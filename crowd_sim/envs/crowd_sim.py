@@ -783,6 +783,15 @@ class CrowdSim(gym.Env):
             dets_xy *= -1
             dets_xy += robot_positions[-1]
 
+            # flag for detections < human_num in first step
+            if len(self.detections) == 0:
+                self.max_detections = len(dets_xy)
+            else:
+                self.max_detections = max(self.max_detections, len(dets_xy))
+
+            if self.max_detections < self.human_num:
+                for i in range(self.human_num - self.max_detections):
+                    dets_xy = np.append(dets_xy, [dets_xy[-1]], axis=0)
 
             if len(self.detections) > 0: # beyond first pass - match to previous detections
                 # get previous set of detections
@@ -799,8 +808,8 @@ class CrowdSim(gym.Env):
                 dets_xy = new_dets.copy()
                 
             # if first set of detections, skip optical flow (initial ids are A-E)
-
             assert len(dets_xy) == len(self.humans)
+
             self.detections.append(dets_xy)
 
             for i, pos in enumerate(dets_xy):
